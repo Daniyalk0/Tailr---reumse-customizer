@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import { DownloadButtons } from "./download-buttons";
 import {
@@ -7,6 +7,7 @@ import {
 } from "../lib/resume-text";
 
 type ResumePreviewProps = {
+  originalResume?: string;
   resume: string;
   suggestedKeywords: string[];
   busy: "upload" | "customize" | "pdf" | "docx" | null;
@@ -14,6 +15,191 @@ type ResumePreviewProps = {
   onAddKeyword: (keyword: string, section: string) => void;
   onDownload: (format: "pdf" | "docx") => void;
 };
+
+type DiffSegment = {
+  type: "unchanged" | "added" | "removed";
+  text: string;
+};
+
+function appendDiffSegment(
+  segments: DiffSegment[],
+  type: DiffSegment["type"],
+  text: string,
+) {
+  if (!text) {
+    return;
+  }
+
+  const previous = segments[segments.length - 1];
+  if (previous?.type === type) {
+    previous.text += text;
+  } else {
+    segments.push({ type, text });
+  }
+}
+
+function compareResumeText(
+  original: string | undefined,
+  customized: string,
+): DiffSegment[] {
+  const originalTokens = original?.match(/\s+|\S+/g) ?? [];
+  const customizedTokens = customized.match(/\s+|\S+/g) ?? [];
+  let prefixLength = 0;
+  while (
+    prefixLength < originalTokens.length &&
+    prefixLength < customizedTokens.length &&
+    originalTokens[prefixLength] === customizedTokens[prefixLength]
+  ) {
+    prefixLength += 1;
+  }
+
+  let suffixLength = 0;
+  while (
+    suffixLength < originalTokens.length - prefixLength &&
+    suffixLength < customizedTokens.length - prefixLength &&
+    originalTokens[originalTokens.length - suffixLength - 1] ===
+      customizedTokens[customizedTokens.length - suffixLength - 1]
+  ) {
+    suffixLength += 1;
+  }
+
+  const oldMiddle = originalTokens.slice(
+    prefixLength,
+    originalTokens.length - suffixLength,
+  );
+  const newMiddle = customizedTokens.slice(
+    prefixLength,
+    customizedTokens.length - suffixLength,
+  );
+  const maxDistance = Math.min(oldMiddle.length + newMiddle.length, 1024);
+  const offset = maxDistance + 1;
+  let vector = new Int32Array(2 * maxDistance + 3);
+  vector[offset + 1] = 0;
+  const trace: Int32Array[] = [];
+  let distance = -1;
+
+  for (let edits = 0; edits <= maxDistance; edits += 1) {
+    trace.push(vector.slice());
+    for (let diagonal = -edits; diagonal <= edits; diagonal += 2) {
+      const index = offset + diagonal;
+      let oldIndex =
+        diagonal === -edits ||
+        (diagonal !== edits && vector[index - 1] < vector[index + 1])
+          ? vector[index + 1]
+          : vector[index - 1] + 1;
+      let newIndex = oldIndex - diagonal;
+
+      while (
+        oldIndex < oldMiddle.length &&
+        newIndex < newMiddle.length &&
+        oldMiddle[oldIndex] === newMiddle[newIndex]
+      ) {
+        oldIndex += 1;
+        newIndex += 1;
+      }
+      vector[index] = oldIndex;
+
+      if (oldIndex >= oldMiddle.length && newIndex >= newMiddle.length) {
+        distance = edits;
+        break;
+      }
+    }
+
+    if (distance !== -1) {
+      break;
+    }
+  }
+
+  const segments: DiffSegment[] = [];
+  appendDiffSegment(
+    segments,
+    "unchanged",
+    originalTokens.slice(0, prefixLength).join(""),
+  );
+
+  if (distance === -1) {
+    appendDiffSegment(segments, "removed", oldMiddle.join(""));
+    appendDiffSegment(segments, "added", newMiddle.join(""));
+  } else {
+    const reversedOperations: DiffSegment[] = [];
+    let oldIndex = oldMiddle.length;
+    let newIndex = newMiddle.length;
+
+    for (let edits = distance; edits > 0; edits -= 1) {
+      const previousVector = trace[edits];
+      const diagonal = oldIndex - newIndex;
+      const previousDiagonal =
+        diagonal === -edits ||
+        (diagonal !== edits &&
+          previousVector[offset + diagonal - 1] <
+            previousVector[offset + diagonal + 1])
+          ? diagonal + 1
+          : diagonal - 1;
+      const previousOldIndex = previousVector[offset + previousDiagonal];
+      const previousNewIndex = previousOldIndex - previousDiagonal;
+
+      while (
+        oldIndex > previousOldIndex &&
+        newIndex > previousNewIndex
+      ) {
+        reversedOperations.push({
+          type: "unchanged",
+          text: oldMiddle[oldIndex - 1],
+        });
+        oldIndex -= 1;
+        newIndex -= 1;
+      }
+
+      if (oldIndex === previousOldIndex) {
+        reversedOperations.push({
+          type: "added",
+          text: newMiddle[newIndex - 1],
+        });
+        newIndex -= 1;
+      } else {
+        reversedOperations.push({
+          type: "removed",
+          text: oldMiddle[oldIndex - 1],
+        });
+        oldIndex -= 1;
+      }
+    }
+
+    while (oldIndex > 0 && newIndex > 0) {
+      reversedOperations.push({
+        type: "unchanged",
+        text: oldMiddle[oldIndex - 1],
+      });
+      oldIndex -= 1;
+      newIndex -= 1;
+    }
+    while (oldIndex > 0) {
+      reversedOperations.push({
+        type: "removed",
+        text: oldMiddle[oldIndex - 1],
+      });
+      oldIndex -= 1;
+    }
+    while (newIndex > 0) {
+      reversedOperations.push({
+        type: "added",
+        text: newMiddle[newIndex - 1],
+      });
+      newIndex -= 1;
+    }
+
+    for (const operation of reversedOperations.reverse()) {
+      appendDiffSegment(segments, operation.type, operation.text);
+    }
+  }
+
+  appendDiffSegment(
+    segments,
+    "unchanged",
+    originalTokens.slice(originalTokens.length - suffixLength).join(""),
+  );
+  return segments;
+}
 
 function EmptyPreview() {
   return (
@@ -81,6 +267,7 @@ function PreviewSkeleton() {
 }
 
 export function ResumePreview({
+  originalResume,
   resume,
   suggestedKeywords,
   busy,
@@ -90,9 +277,15 @@ export function ResumePreview({
 }: ResumePreviewProps) {
   const isCustomizing = busy === "customize";
   const skillCategories = getSkillsCategories(resume);
+  const [view, setView] = useState<"preview" | "diff">("preview");
   const [selectedCategories, setSelectedCategories] = useState<
     Record<string, string>
   >({});
+  const diffSegments = useMemo(
+    () =>
+      view === "diff" ? compareResumeText(originalResume, resume) : [],
+    [originalResume, resume, view],
+  );
 
   return (
     <section
@@ -114,25 +307,98 @@ export function ResumePreview({
         </span>
       </div>
 
-      <div className={`relative mt-[19px] min-h-[390px] overflow-hidden rounded-[11px] border border-[#e9ede9] bg-white shadow-[inset_0_1px_3px_rgba(34,55,39,0.025)] sm:min-h-[475px] ${resume ? "bg-[#fbfcfa]" : ""}`}>
+      {!isCustomizing && resume && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div
+            className="inline-flex rounded-[8px] border border-[#e5ebe5] bg-[#f7f9f6] p-1"
+            aria-label="Resume preview mode"
+            role="group"
+          >
+            <button
+              className={`min-h-[32px] rounded-[6px] px-3 text-[11px] font-medium transition focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-[#34704b]/35 ${
+                view === "preview"
+                  ? "bg-white text-[#28583e] shadow-sm"
+                  : "text-[#6b786f] hover:text-[#34463a]"
+              }`}
+              type="button"
+              aria-pressed={view === "preview"}
+              onClick={() => setView("preview")}
+            >
+              Preview
+            </button>
+            <button
+              className={`min-h-[32px] rounded-[6px] px-3 text-[11px] font-medium transition focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-[#34704b]/35 ${
+                view === "diff"
+                  ? "bg-white text-[#28583e] shadow-sm"
+                  : "text-[#6b786f] hover:text-[#34463a]"
+              }`}
+              type="button"
+              aria-pressed={view === "diff"}
+              onClick={() => setView("diff")}
+            >
+              Diff View
+            </button>
+          </div>
+          {view === "diff" && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+              <span className="rounded-[4px] bg-[#e8f3e9] px-1.5 py-0.5 text-[#28583e]">
+                Added
+              </span>
+              <span className="rounded-[4px] bg-[#f8e9e7] px-1.5 py-0.5 text-[#9a403b] line-through">
+                Removed
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={`relative mt-[19px] min-h-[390px] rounded-[11px] border border-[#e9ede9] bg-white shadow-[inset_0_1px_3px_rgba(34,55,39,0.025)] ${view === "diff" && resume && !isCustomizing ? "max-h-[70vh] overflow-auto" : "overflow-hidden"} sm:min-h-[475px] ${resume ? "bg-[#fbfcfa]" : ""}`}>
         {isCustomizing ? (
           <PreviewSkeleton />
         ) : resume ? (
-          <>
-            <label className="sr-only" htmlFor="customized-resume">
-              Customized resume preview. Edit text before downloading.
-            </label>
-            <textarea
-              id="customized-resume"
-              className="block min-h-[388px] w-full resize-y border-0 bg-transparent p-[23px] font-sans text-xs leading-[1.8] text-[#303b32] focus:outline-[3px] focus:outline-offset-[-3px] focus:outline-[#34704b]/30 sm:min-h-[473px]"
-              maxLength={50_000}
-              value={resume}
-              onChange={onResumeChange}
-            />
-            <span className="pointer-events-none absolute bottom-2.5 right-3 rounded-[5px] bg-[#fbfcfa]/95 px-1.5 py-1 text-[9px] text-[#89948b]">
-              {resume.length.toLocaleString()} characters
-            </span>
-          </>
+          view === "diff" ? (
+            <pre className="min-h-[388px] whitespace-pre-wrap break-words p-[23px] font-sans text-xs leading-[1.8] text-[#303b32] sm:min-h-[473px]">
+              {diffSegments.map((segment, index) => {
+                if (segment.type === "unchanged") {
+                  return <span key={index}>{segment.text}</span>;
+                }
+                if (segment.type === "added") {
+                  return (
+                    <ins
+                      className="rounded-[2px] bg-[#e8f3e9] text-[#28583e] no-underline"
+                      key={index}
+                    >
+                      {segment.text}
+                    </ins>
+                  );
+                }
+                return (
+                  <del
+                    className="rounded-[2px] bg-[#f8e9e7] text-[#9a403b] line-through"
+                    key={index}
+                  >
+                    {segment.text}
+                  </del>
+                );
+              })}
+            </pre>
+          ) : (
+            <>
+              <label className="sr-only" htmlFor="customized-resume">
+                Customized resume preview. Edit text before downloading.
+              </label>
+              <textarea
+                id="customized-resume"
+                className="block min-h-[388px] w-full resize-y border-0 bg-transparent p-[23px] font-sans text-xs leading-[1.8] text-[#303b32] focus:outline-[3px] focus:outline-offset-[-3px] focus:outline-[#34704b]/30 sm:min-h-[473px]"
+                maxLength={50_000}
+                value={resume}
+                onChange={onResumeChange}
+              />
+              <span className="pointer-events-none absolute bottom-2.5 right-3 rounded-[5px] bg-[#fbfcfa]/95 px-1.5 py-1 text-[9px] text-[#89948b]">
+                {resume.length.toLocaleString()} characters
+              </span>
+            </>
+          )
         ) : (
           <EmptyPreview />
         )}

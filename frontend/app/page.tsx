@@ -385,7 +385,7 @@ export default function Home() {
                 />
               </svg>
             </span>
-            <span className="text-xl font-semibold tracking-[-0.055em]">tailr</span>
+            <span className="text-xl font-semibold tracking-[-0.055em]">Tailr</span>
           </a>
           <span className="inline-flex max-w-[155px] items-center gap-2 text-right text-[10px] text-[#66746a] sm:max-w-none sm:text-left sm:text-[13px]">
             <span className="inline-block size-[7px] shrink-0 rounded-full bg-[#5d956d] shadow-[0_0_0_3px_rgba(93,149,109,0.12)]" aria-hidden="true" />
@@ -520,6 +520,7 @@ export default function Home() {
           </section>
 
           <ResumePreview
+            originalResume={resumeText}
             resume={customizedResume}
             suggestedKeywords={suggestedKeywords}
             busy={busy}
