@@ -373,7 +373,7 @@ export default function Home() {
     <main className="min-h-screen bg-[radial-gradient(ellipse_at_82%_0%,rgba(222,235,222,0.6),transparent_34rem),#f6f7f4] px-4 pb-9 text-[#1f2b24] sm:px-6 lg:px-7">
       <div className="mx-auto w-full max-w-[1260px]">
         <header className="flex min-h-[66px] items-center justify-between border-b border-[#dae2da]/80 sm:min-h-[78px]">
-          <a className="inline-flex items-center gap-2.5 text-[#1f2b24] no-underline" href="/" aria-label="Tailor home">
+          <a className="inline-flex items-center gap-2.5 text-[#1f2b24] no-underline" href="/" aria-label="Tailr home">
             <span className="grid size-[34px] place-items-center rounded-[11px] bg-[#28583e] text-white" aria-hidden="true">
               <svg className="size-[21px]" viewBox="0 0 24 24" fill="none">
                 <path
@@ -385,7 +385,7 @@ export default function Home() {
                 />
               </svg>
             </span>
-            <span className="text-xl font-semibold tracking-[-0.055em]">tailor</span>
+            <span className="text-xl font-semibold tracking-[-0.055em]">tailr</span>
           </a>
           <span className="inline-flex max-w-[155px] items-center gap-2 text-right text-[10px] text-[#66746a] sm:max-w-none sm:text-left sm:text-[13px]">
             <span className="inline-block size-[7px] shrink-0 rounded-full bg-[#5d956d] shadow-[0_0_0_3px_rgba(93,149,109,0.12)]" aria-hidden="true" />

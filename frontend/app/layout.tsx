@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tailor — Resume Customizer",
-  description: "Tailor your resume to a role while keeping your experience true.",
+  title: "Tailr — Resume Customizer",
+  description: "Tailr your resume to a role while keeping your experience true.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
