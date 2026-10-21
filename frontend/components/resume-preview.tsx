@@ -295,14 +295,24 @@ export function ResumePreview({
     >
       <div className="flex items-center justify-between gap-[15px] border-b border-[#edf0ed] pb-5">
         <div>
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.14em] text-[#52775c]">Step 02</p>
-          <h2 id="preview-title" className="mt-1.5 text-lg font-semibold tracking-[-0.035em] text-[#26342a]">Customized Resume</h2>
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.14em] text-[#52775c]">
+            Step 02
+          </p>
+          <h2
+            id="preview-title"
+            className="mt-1.5 text-lg font-semibold tracking-[-0.035em] text-[#26342a]"
+          >
+            Customized Resume
+          </h2>
           <p className="mt-1.5 text-xs leading-relaxed text-[#6b786f]">
             Review the result, make it yours, then choose a format.
           </p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#e5ebe5] px-[9px] py-[7px] text-[10px] text-[#748078]">
-          <span className="inline-block size-1.5 rounded-full bg-[#5d956d] shadow-[0_0_0_3px_rgba(93,149,109,0.12)]" aria-hidden="true" />
+          <span
+            className="inline-block size-1.5 rounded-full bg-[#5d956d] shadow-[0_0_0_3px_rgba(93,149,109,0.12)]"
+            aria-hidden="true"
+          />
           {resume ? "Ready to review" : "Preview"}
         </span>
       </div>
@@ -352,7 +362,9 @@ export function ResumePreview({
         </div>
       )}
 
-      <div className={`relative mt-[19px] min-h-[390px] rounded-[11px] border border-[#e9ede9] bg-white shadow-[inset_0_1px_3px_rgba(34,55,39,0.025)] ${view === "diff" && resume && !isCustomizing ? "max-h-[70vh] overflow-auto" : "overflow-hidden"} sm:min-h-[475px] ${resume ? "bg-[#fbfcfa]" : ""}`}>
+      <div
+        className={`relative mt-[19px] min-h-[390px] rounded-[11px] border border-[#e9ede9] bg-white shadow-[inset_0_1px_3px_rgba(34,55,39,0.025)] ${view === "diff" && resume && !isCustomizing ? "max-h-[70vh] overflow-auto" : "overflow-hidden"} sm:min-h-[475px] ${resume ? "bg-[#fbfcfa]" : ""}`}
+      >
         {isCustomizing ? (
           <PreviewSkeleton />
         ) : resume ? (
@@ -437,7 +449,7 @@ export function ResumePreview({
                     selectedCategories[keyword],
                   )
                     ? selectedCategories[keyword]
-                    : recommendedCategory ?? "";
+                    : (recommendedCategory ?? "");
 
                   return (
                     <li
@@ -499,14 +511,25 @@ export function ResumePreview({
 
       <div className="pt-[17px]">
         <div className="mb-[11px] flex flex-col items-start gap-1 min-[390px]:flex-row min-[390px]:items-baseline min-[390px]:justify-between">
-          <span className="text-xs font-semibold text-[#34463a]">Ready to take it with you?</span>
-          <span className="text-[10px] text-[#87928a]">Choose your preferred format</span>
+          <span className="text-xs font-semibold text-[#34463a]">
+            Ready to take it with you?
+          </span>
+          <span className="text-[10px] text-[#87928a]">
+            Choose your preferred format
+          </span>
         </div>
         <DownloadButtons
           busy={busy === "pdf" || busy === "docx" ? busy : null}
           disabled={!resume || busy !== null}
           onDownload={onDownload}
         />
+      </div>
+      <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <span aria-hidden="true">ⓘ</span>
+        <p>
+          AI may occasionally alter or omit details. Please review your resume
+          before downloading.
+        </p>
       </div>
     </section>
   );

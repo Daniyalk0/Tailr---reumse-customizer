@@ -1,558 +1,516 @@
-"use client";
+import Navbar from "@/components/Navbar";
+import Link from "next/link";
 
-import { useRef, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
-import { FeedbackMessage } from "../components/feedback-message";
-import { JobDescriptionInput } from "../components/job-description-input";
-import { ResumePreview } from "../components/resume-preview";
-import { ResumeUpload } from "../components/resume-upload";
-import { insertKeywordInSkillsCategory } from "../lib/resume-text";
+const features = [
+  {
+    number: "01",
+    title: "Tailored to the role",
+    description:
+      "Adapt your resume to a specific job description while keeping your real experience and skills intact.",
+  },
+  {
+    number: "02",
+    title: "Find missing keywords",
+    description:
+      "Discover relevant skills and keywords from the job description that you may want to address.",
+  },
+  {
+    number: "03",
+    title: "Ready to download",
+    description:
+      "Download your customized resume as a PDF or DOCX and prepare it for your next application.",
+  },
+];
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
-const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
-const MAX_RESUME_TEXT_LENGTH = 50_000;
-const MAX_JOB_DESCRIPTION_LENGTH = 20_000;
+const steps = [
+  {
+    number: "01",
+    title: "Upload your resume",
+    description: "Start with the experience and skills you already have.",
+  },
+  {
+    number: "02",
+    title: "Add the job description",
+    description: "Give Tailr the role you're applying for.",
+  },
+  {
+    number: "03",
+    title: "Review your tailored resume",
+    description: "Review the result, explore suggested keywords, and download.",
+  },
+];
 
-type BusyAction = "upload" | "customize" | "pdf" | "docx" | null;
-
-function getClientError(cause: unknown, fallback: string): string {
-  if (cause instanceof TypeError) {
-    return "We can’t reach our servers. Check your connection and try again.";
-  }
-
-  return cause instanceof Error ? cause.message : fallback;
+export function ArrowIcon({ diagonal = false }: { diagonal?: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="size-4">
+      {diagonal ? (
+        <path
+          d="M5 15 15 5M6 5h9v9"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        <path
+          d="M4 10h12m-5-5 5 5-5 5"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
 }
 
-async function getErrorMessage(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
+export function LeafMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 32 32" fill="none" className="size-8">
+      <rect width="32" height="32" rx="10" fill="#254D38" />
+      <path
+        d="M23.5 8.5C14 8.5 8 12.2 8 19a5 5 0 0 0 5 5c6.8 0 10.5-6 10.5-15.5Z"
+        fill="#C9E7B8"
+      />
+      <path
+        d="M10.5 22 20 12.5"
+        stroke="#254D38"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
-    if (typeof body === "object" && body !== null && "detail" in body) {
-      const detail = body.detail;
-
-      if (typeof detail === "string") {
-        return detail;
-      }
-
-      if (Array.isArray(detail)) {
-        return detail
-          .map((item: unknown) =>
-            typeof item === "object" &&
-            item !== null &&
-            "msg" in item &&
-            typeof item.msg === "string"
-              ? item.msg
-              : "",
-          )
-          .filter(Boolean)
-          .join(" ");
-      }
-    }
-  } catch {
-    return `Request failed (${response.status}).`;
-  }
-
-  return `Request failed (${response.status}).`;
+function CheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      className="size-4 shrink-0"
+    >
+      <path
+        d="m5 10 3.2 3.2L15 6.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export default function Home() {
-  const [file, setFile] = useState<File | null>(null);
-  const [resumeText, setResumeText] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
-  const [customizedResume, setCustomizedResume] = useState("");
-  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
-  const [busy, setBusy] = useState<BusyAction>(null);
-  const [error, setError] = useState("");
-  const [uploadFailed, setUploadFailed] = useState(false);
-  const requestInFlight = useRef(false);
-
-  function handleFileChange(selectedFile: File | null) {
-    if (!selectedFile) {
-      return;
-    }
-    if (selectedFile && !/\.(pdf|docx)$/i.test(selectedFile.name)) {
-      setError("Choose a file with a .pdf or .docx extension.");
-      return;
-    }
-    if (selectedFile && selectedFile.size > MAX_UPLOAD_SIZE_BYTES) {
-      setError("The selected file exceeds the 10 MB limit.");
-      return;
-    }
-
-    setFile(selectedFile);
-    setResumeText("");
-    setCustomizedResume("");
-    setSuggestedKeywords([]);
-    setUploadFailed(false);
-    setError("");
-
-    if (selectedFile.size === 0) {
-      setError("The selected file is empty.");
-      return;
-    }
-
-    void handleUpload(selectedFile);
-  }
-
-  async function handleUpload(uploadFile: File) {
-    if (requestInFlight.current) {
-      return;
-    }
-    if (!/\.(pdf|docx)$/i.test(uploadFile.name)) {
-      setError("Choose a file with a .pdf or .docx extension.");
-      setUploadFailed(false);
-      return;
-    }
-    if (uploadFile.size === 0) {
-      setError("The selected file is empty.");
-      setUploadFailed(false);
-      return;
-    }
-    if (uploadFile.size > MAX_UPLOAD_SIZE_BYTES) {
-      setError("The selected file exceeds the 10 MB limit.");
-      setUploadFailed(false);
-      return;
-    }
-
-    requestInFlight.current = true;
-    setBusy("upload");
-    setError("");
-    setUploadFailed(false);
-    setCustomizedResume("");
-    setSuggestedKeywords([]);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", uploadFile);
-
-      const response = await fetch(`${API_BASE_URL}/upload-resume`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(await getErrorMessage(response));
-      }
-
-      const result: unknown = await response.json();
-      if (
-        typeof result !== "object" ||
-        result === null ||
-        !("extracted_text" in result) ||
-        typeof result.extracted_text !== "string"
-      ) {
-        throw new Error("The backend returned an invalid upload response.");
-      }
-      if (result.extracted_text.length > MAX_RESUME_TEXT_LENGTH) {
-        throw new Error("The extracted resume exceeds the 50,000-character limit.");
-      }
-      if (!result.extracted_text.trim()) {
-        throw new Error("No readable text was found in the uploaded resume.");
-      }
-
-      setResumeText(result.extracted_text);
-      setUploadFailed(false);
-    } catch (cause) {
-      setError(
-        getClientError(cause, "Could not upload the resume. Please try again."),
-      );
-      setUploadFailed(true);
-    } finally {
-      requestInFlight.current = false;
-      setBusy(null);
-    }
-  }
-
-  function handleRetryUpload() {
-    if (file) {
-      void handleUpload(file);
-    }
-  }
-
-  async function handleCustomize(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (requestInFlight.current) {
-      return;
-    }
-    if (!resumeText.trim() || !jobDescription.trim()) {
-      setError("Upload a resume and add a job description before continuing.");
-      return;
-    }
-    if (resumeText.length > MAX_RESUME_TEXT_LENGTH) {
-      setError("Resume text must be 50,000 characters or fewer.");
-      return;
-    }
-    if (jobDescription.length > MAX_JOB_DESCRIPTION_LENGTH) {
-      setError("The job description must be 20,000 characters or fewer.");
-      return;
-    }
-
-    requestInFlight.current = true;
-    setBusy("customize");
-    setError("");
-    setCustomizedResume("");
-    setSuggestedKeywords([]);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/customize-resume`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resume_text: resumeText,
-          job_description: jobDescription,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await getErrorMessage(response));
-      }
-
-      const result: unknown = await response.json();
-      if (
-        typeof result !== "object" ||
-        result === null ||
-        !("customized_resume" in result) ||
-        typeof result.customized_resume !== "string" ||
-        !("suggested_keywords" in result) ||
-        !Array.isArray(result.suggested_keywords) ||
-        !result.suggested_keywords.every(
-          (keyword: unknown) =>
-            typeof keyword === "string" && Boolean(keyword.trim()),
-        )
-      ) {
-        throw new Error("The backend returned an invalid customization response.");
-      }
-      if (!result.customized_resume.trim()) {
-        throw new Error("The backend returned an empty customized resume.");
-      }
-      if (result.customized_resume.length > MAX_RESUME_TEXT_LENGTH) {
-        throw new Error("The customized resume exceeds the 50,000-character limit.");
-      }
-
-      setCustomizedResume(result.customized_resume);
-      setSuggestedKeywords(
-        Array.from(
-          new Map(
-            result.suggested_keywords.map((keyword: string) => [
-              keyword.trim().toLocaleLowerCase(),
-              keyword.trim(),
-            ]),
-          ).values(),
-        ),
-      );
-    } catch (cause) {
-      setError(
-        getClientError(
-          cause,
-          "Could not customize the resume. Please try again.",
-        ),
-      );
-    } finally {
-      requestInFlight.current = false;
-      setBusy(null);
-    }
-  }
-
-  async function handleDownload(format: "pdf" | "docx") {
-    if (requestInFlight.current) {
-      return;
-    }
-    if (!customizedResume.trim()) {
-      setError("Customize your resume before downloading it.");
-      return;
-    }
-    if (customizedResume.length > MAX_RESUME_TEXT_LENGTH) {
-      setError("Resume text must be 50,000 characters or fewer to download.");
-      return;
-    }
-
-    requestInFlight.current = true;
-    setBusy(format);
-    setError("");
-
-    try {
-      const body =
-        format === "pdf"
-          ? { resume_text: customizedResume }
-          : {
-              resume_text: customizedResume,
-              job_description: jobDescription,
-            };
-      const response = await fetch(
-        `${API_BASE_URL}/download-resume/${format}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await getErrorMessage(response));
-      }
-
-      const downloadUrl = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = `customized_resume.${format}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-    } catch (cause) {
-      setError(
-        getClientError(
-          cause,
-          `Could not download the ${format.toUpperCase()} resume.`,
-        ),
-      );
-    } finally {
-      requestInFlight.current = false;
-      setBusy(null);
-    }
-  }
-
-  function handleResumeTextChange(event: ChangeEvent<HTMLTextAreaElement>) {
-    setResumeText(event.target.value);
-    setCustomizedResume("");
-    setSuggestedKeywords([]);
-  }
-
-  function handleJobDescriptionChange(event: ChangeEvent<HTMLTextAreaElement>) {
-    setJobDescription(event.target.value);
-    setCustomizedResume("");
-    setSuggestedKeywords([]);
-  }
-
-  function handleCustomizedResumeChange(
-    event: ChangeEvent<HTMLTextAreaElement>,
-  ) {
-    setCustomizedResume(event.target.value);
-  }
-
-  function handleAddKeyword(keyword: string, category: string) {
-    if (requestInFlight.current || !customizedResume.trim()) {
-      return;
-    }
-
-    const result = insertKeywordInSkillsCategory(
-      customizedResume,
-      keyword,
-      category,
-    );
-    if (result.status === "duplicate") {
-      setError(`“${keyword}” is already listed in Skills.`);
-      return;
-    }
-    if (result.status === "category-not-found") {
-      setError("Choose an existing category in the Skills section.");
-      return;
-    }
-    if (result.status === "invalid-keyword") {
-      setError("Choose a valid suggested keyword before adding it.");
-      return;
-    }
-    if (result.resume.length > MAX_RESUME_TEXT_LENGTH) {
-      setError("The customized resume cannot exceed 50,000 characters.");
-      return;
-    }
-
-    setCustomizedResume(result.resume);
-    setSuggestedKeywords((current) =>
-      current.filter(
-        (suggestion) =>
-          suggestion.toLocaleLowerCase() !== keyword.toLocaleLowerCase(),
-      ),
-    );
-    setError("");
-  }
-
   return (
-    <main className="min-h-screen bg-[radial-gradient(ellipse_at_82%_0%,rgba(222,235,222,0.6),transparent_34rem),#f6f7f4] px-4 pb-9 text-[#1f2b24] sm:px-6 lg:px-7">
-      <div className="mx-auto w-full max-w-[1260px]">
-        <header className="flex min-h-[66px] items-center justify-between border-b border-[#dae2da]/80 sm:min-h-[78px]">
-          <a className="inline-flex items-center gap-2.5 text-[#1f2b24] no-underline" href="/" aria-label="Tailr home">
-            <span className="grid size-[34px] place-items-center rounded-[11px] bg-[#28583e] text-white" aria-hidden="true">
-              <svg className="size-[21px]" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M5 19 17.5 6.5M8 5l1.2 3.8L13 10l-3.8 1.2L8 15l-1.2-3.8L3 10l3.8-1.2L8 5ZM17 13l1.1 3.1L21 17l-2.9.9L17 21l-.9-3.1L13 17l3.1-.9L17 13Z"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            <span className="text-xl font-semibold tracking-[-0.055em]">Tailr</span>
-          </a>
-          <span className="inline-flex max-w-[155px] items-center gap-2 text-right text-[10px] text-[#66746a] sm:max-w-none sm:text-left sm:text-[13px]">
-            <span className="inline-block size-[7px] shrink-0 rounded-full bg-[#5d956d] shadow-[0_0_0_3px_rgba(93,149,109,0.12)]" aria-hidden="true" />
-            Your experience, thoughtfully tailored
-          </span>
-        </header>
+    <main className="min-h-screen overflow-hidden bg-[#FAFAF6] text-[#20372B]">
+      {/* Navigation */}
 
-        <section className="flex min-h-0 flex-col items-start justify-between gap-5 py-8 sm:min-h-[235px] sm:flex-row sm:items-center sm:gap-8 sm:py-10">
-          <div className="max-w-[650px]">
-            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.14em] text-[#52775c]">A better fit starts here</p>
-            <h1 className="mt-[13px] text-[clamp(34px,9vw,43px)] font-semibold leading-[1.08] tracking-[-0.057em] sm:text-[clamp(34px,4.1vw,49px)]">
-              Your next role.
+      {/* Hero */}
+      <section className="relative">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-40 -top-36 size-[440px] rounded-full bg-[#DDEBD6]/50 blur-3xl"
+        />
+
+        <div className="relative mx-auto grid max-w-[1260px] items-center gap-14 px-5 pb-20 pt-16 sm:px-8 sm:pb-24 sm:pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12 lg:px-0 lg:pb-28 lg:pt-20">
+          <div className="max-w-2xl">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#D6E3D0] bg-[#F0F5EB] px-3.5 py-2 text-xs font-medium text-[#41654A]">
+              <span className="size-1.5 rounded-full bg-[#638D63]" />
+              Your next opportunity starts here
+            </div>
+
+            <h1 className="text-[clamp(3.2rem,7vw,5.7rem)] font-medium leading-[0.99] tracking-[-0.075em] text-[#20372B]">
+              Your experience.
               <br />
-              <span className="text-[#28583e]">A resume that speaks to it.</span>
+              <span className="font-serif italic font-normal text-[#648567]">
+                Better aligned.
+              </span>
             </h1>
-            <p className="mt-3 max-w-[590px] text-[13px] leading-[1.7] text-[#66736a] sm:mt-4 sm:text-[15px] sm:leading-[1.75]">
-              Bring your experience and the opportunity. We’ll help you put the
-              most relevant parts forward—without losing what makes it yours.
+
+            <p className="mt-7 max-w-lg text-base leading-7 text-[#69776D] sm:text-lg sm:leading-8">
+              A resume should speak the language of the role you want. Tailr
+              helps you tailor your existing experience to each opportunity,
+              without losing what makes it yours.
             </p>
-          </div>
-          <div className="flex w-full items-center gap-[13px] rounded-[13px] border border-[#e1e9e1] bg-white/70 p-3 shadow-[0_10px_30px_rgba(40,69,48,0.035)] sm:w-[270px] sm:shrink-0 sm:items-start sm:p-[17px] md:w-[236px]" aria-label="Your information stays yours">
-            <span className="grid size-[35px] shrink-0 place-items-center rounded-[10px] bg-[#edf4ee] text-[#28583e]" aria-hidden="true">
-              <svg className="size-5" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M12 3 19 6v5c0 4.5-2.9 8-7 10-4.1-2-7-5.5-7-10V6l7-3Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="m9 12 2 2 4-4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            <span>
-              <strong className="block pt-px text-xs font-semibold leading-[1.5] text-[#2d4134]">Grounded in your experience</strong>
-              <small className="mt-1 block text-[11px] leading-[1.5] text-[#728076]">No invented skills or achievements</small>
-            </span>
-          </div>
-        </section>
 
-        <nav className="mb-[17px] flex items-center gap-1.5 rounded-xl border border-[#e3e9e3] bg-white/60 px-[7px] py-2.5 sm:gap-[13px] sm:px-[17px] sm:py-3" aria-label="Resume customization steps">
-          <span className="inline-flex shrink items-center gap-1 whitespace-nowrap text-[8px] font-medium text-[#315a3e] sm:gap-2 sm:text-xs">
-            <span className="grid size-5 shrink-0 place-items-center rounded-full border border-[#d5e5d7] bg-[#eaf3eb] text-[8px] font-bold text-[#28583e] sm:size-[23px] sm:text-[9px]">01</span>
-            <span>Share your materials</span>
-          </span>
-          <span className="h-px min-w-1 flex-1 bg-[#e5eae5]" aria-hidden="true" />
-          <span className={`inline-flex shrink items-center gap-1 whitespace-nowrap text-[8px] font-medium sm:gap-2 sm:text-xs ${customizedResume ? "text-[#315a3e]" : "text-[#8a958d]"}`}>
-            <span className={`grid size-5 shrink-0 place-items-center rounded-full border text-[8px] font-bold sm:size-[23px] sm:text-[9px] ${customizedResume ? "border-[#d5e5d7] bg-[#eaf3eb] text-[#28583e]" : "border-[#e2e8e2] bg-white text-[#76847a]"}`}>02</span>
-            <span>Make it yours</span>
-          </span>
-          <span className="h-px min-w-1 flex-1 bg-[#e5eae5]" aria-hidden="true" />
-          <span className={`inline-flex shrink items-center gap-1 whitespace-nowrap text-[8px] font-medium sm:gap-2 sm:text-xs ${customizedResume ? "text-[#315a3e]" : "text-[#8a958d]"}`}>
-            <span className={`grid size-5 shrink-0 place-items-center rounded-full border text-[8px] font-bold sm:size-[23px] sm:text-[9px] ${customizedResume ? "border-[#d5e5d7] bg-[#eaf3eb] text-[#28583e]" : "border-[#e2e8e2] bg-white text-[#76847a]"}`}>03</span>
-            <span>Take it with you</span>
-          </span>
-        </nav>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="/customize"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-[#254D38] px-7 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#193C29]"
+              >
+                Tailor my resume
+                <ArrowIcon />
+              </Link>
 
-        {error && (
-          <div className="mb-3.5">
-            <FeedbackMessage kind="error" message={error} />
-          </div>
-        )}
-        {busy && (
-          <div className="mb-3.5">
-            <FeedbackMessage
-              kind="loading"
-              message={
-                busy === "upload"
-                  ? "Reading your resume…"
-                  : busy === "customize"
-                    ? "Finding the strongest match for this role…"
-                    : `Preparing your ${busy.toUpperCase()} download…`
-              }
-            />
-          </div>
-        )}
+              <a
+                href="#how-it-works"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-medium text-[#47614E] transition hover:bg-[#EDF1E9]"
+              >
+                See how it works
+                <ArrowIcon diagonal />
+              </a>
+            </div>
 
-        <div className="grid grid-cols-1 items-start gap-[13px] lg:grid-cols-[minmax(0,0.94fr)_minmax(0,1.06fr)] lg:gap-[17px]">
-          <section className="min-w-0 rounded-[13px] border border-[#e2e8e2] bg-white p-[19px] shadow-[0_2px_5px_rgba(34,55,39,0.025),0_16px_42px_rgba(34,55,39,0.045)] sm:rounded-[15px] sm:p-6" aria-labelledby="input-title">
-            <div className="flex items-start justify-between gap-[15px] border-b border-[#edf0ed] pb-5">
-              <div>
-                <p className="m-0 text-[11px] font-bold uppercase tracking-[0.14em] text-[#52775c]">Step 01</p>
-                <h2 id="input-title" className="mt-1.5 text-lg font-semibold tracking-[-0.035em] text-[#26342a]">Start with the essentials</h2>
-                <p className="mt-1.5 text-xs leading-relaxed text-[#6b786f]">
-                  Add your current resume and the role you’re aiming for.
-                </p>
-              </div>
-              <span className="grid size-[38px] shrink-0 place-items-center rounded-[11px] bg-[#f0f5f0] text-[#477051]" aria-hidden="true">
-                <svg className="size-[21px]" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M7 3.75h6.5L19 9.25V20a.75.75 0 0 1-.75.75h-10.5A.75.75 0 0 1 7 20V3.75Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M13 4v5.5h5.5M10 13h6M10 16h6"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
+            <div className="mt-9 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-[#738075]">
+              <span className="inline-flex items-center gap-1.5">
+                <CheckIcon />
+                Keep your experience authentic
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <CheckIcon />
+                PDF & DOCX exports
               </span>
             </div>
+          </div>
 
-            <div className="pt-[21px]">
-              <ResumeUpload
-                file={file}
-                resumeText={resumeText}
-                isUploading={busy === "upload"}
-                isBusy={busy !== null}
-                canRetry={uploadFailed}
-                onFileChange={handleFileChange}
-                onRetry={handleRetryUpload}
-                onResumeTextChange={handleResumeTextChange}
-              />
-              <div className="my-5 h-px bg-[#edf0ed]" />
-              <JobDescriptionInput
-                value={jobDescription}
-                isCustomizing={busy === "customize"}
-                isBusy={busy !== null}
-                canSubmit={Boolean(resumeText.trim() && jobDescription.trim())}
-                onChange={handleJobDescriptionChange}
-                onSubmit={handleCustomize}
-              />
+          {/* Product preview */}
+          <div className="relative mx-auto w-full max-w-[510px] lg:ml-auto">
+            <div className="absolute -inset-5 rounded-[36px] bg-[#E8EEE1]/60 blur-xl" />
+
+            <div className="relative rotate-[1deg] rounded-[25px] border border-[#E1E5DC] bg-white p-5 shadow-[0_25px_80px_-35px_rgba(36,67,43,0.28)] sm:p-7">
+              <div className="flex items-center justify-between border-b border-[#EDF0E9] pb-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-[#EAF1E4] text-[#41684A]">
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="size-5"
+                    >
+                      <path
+                        d="M7 3.75h7l4 4V20.25H7a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M14 4v4h4M8.5 12h6M8.5 15.5h6"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[#293F30]">
+                      Your tailored resume
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#879188]">
+                      A closer match for your next role
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-[#EDF5E9] px-3 py-1.5 text-[11px] font-medium text-[#49714E]">
+                  Preview
+                </span>
+              </div>
+
+              <div className="py-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="h-3 w-32 rounded-full bg-[#2E4B38]" />
+                    <div className="mt-2.5 h-2 w-24 rounded-full bg-[#B6C5B4]" />
+                  </div>
+                  <div className="flex size-10 items-center justify-center rounded-full bg-[#EFF3EA] text-[#68816A]">
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="size-5"
+                    >
+                      <circle
+                        cx="12"
+                        cy="8"
+                        r="3.25"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                      />
+                      <path
+                        d="M5.5 20a6.5 6.5 0 0 1 13 0"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="mt-7">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#79907A]">
+                    Professional summary
+                  </p>
+                  <div className="space-y-2">
+                    <div className="h-2 w-full rounded-full bg-[#E8ECE5]" />
+                    <div className="h-2 w-[94%] rounded-full bg-[#E8ECE5]" />
+                    <div className="h-2 w-[77%] rounded-full bg-[#E8ECE5]" />
+                  </div>
+                </div>
+
+                <div className="mt-7">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#79907A]">
+                    Relevant skills
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {["React", "TypeScript", "APIs", "Problem solving"].map(
+                      (skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-lg border border-[#DCE8D7] bg-[#F3F7F0] px-3 py-2 text-xs text-[#47664A]"
+                        >
+                          {skill}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-7 rounded-xl border border-[#DCE8D7] bg-[#F5F8F1] p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-[#3D6544]">
+                    <CheckIcon />
+                    Suggested keywords
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-[#728174]">
+                    Discover relevant terms from the job description to consider
+                    incorporating where they accurately reflect your experience.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-[#EDF0E9] pt-4">
+                <span className="text-xs text-[#7D897D]">
+                  Your experience, thoughtfully tailored.
+                </span>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-[#45664A]">
+                  <span className="size-1.5 rounded-full bg-[#719A70]" />
+                  Ready to review
+                </div>
+              </div>
             </div>
-          </section>
 
-          <ResumePreview
-            originalResume={resumeText}
-            resume={customizedResume}
-            suggestedKeywords={suggestedKeywords}
-            busy={busy}
-            onResumeChange={handleCustomizedResumeChange}
-            onAddKeyword={handleAddKeyword}
-            onDownload={handleDownload}
-          />
+            <div className="absolute -bottom-5 -left-3 rounded-2xl border border-[#E0E7DB] bg-white px-4 py-3 shadow-lg sm:-left-8">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-[#EAF1E4] text-[#42694A]">
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="size-5"
+                  >
+                    <path
+                      d="M7 3.75h7l4 4v12.5H7a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2Z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M14 4v4h4"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                    <path
+                      d="M8.5 14h6M8.5 17h4"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-[#314735]">
+                    Ready for export
+                  </p>
+                  <p className="mt-1 text-[11px] text-[#839084]">PDF or DOCX</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature strip */}
+      <section className="border-y border-[#E6E9E0] bg-[#F3F5EF]">
+        <div className="mx-auto grid max-w-[1260px] grid-cols-1 gap-7 px-5 py-8 sm:grid-cols-3 sm:gap-5 sm:px-8 lg:px-0">
+          {[
+            "Built around your real experience",
+            "Matched to the role you're targeting",
+            "Exportable, editable resume files",
+          ].map((item) => (
+            <div
+              key={item}
+              className="flex items-center justify-center gap-2.5 text-center text-sm text-[#536957]"
+            >
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E1EBDD] text-[#416B48]">
+                <CheckIcon />
+              </span>
+              {item}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features */}
+      <section
+        id="features"
+        className="mx-auto max-w-[1260px] scroll-mt-10 px-5 py-20 sm:px-8 sm:py-24 lg:px-0 lg:py-28"
+      >
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#648567]">
+            Less guesswork. More focus.
+          </p>
+          <h2 className="mt-4 text-3xl font-medium leading-tight tracking-[-0.055em] sm:text-5xl">
+            Every application deserves
+            <br className="hidden sm:block" /> a little more intention.
+          </h2>
+          <p className="mt-5 max-w-xl leading-7 text-[#718074]">
+            Tailr helps you focus your existing experience on the opportunity in
+            front of you, so you can spend less time rewriting and more time
+            applying.
+          </p>
         </div>
 
-        <footer className="flex items-center justify-center gap-[7px] px-[5px] pt-[22px] text-center text-[10px] text-[#78847b]">
-          <span className="inline-flex text-[#6c8972]" aria-hidden="true">
-            <svg className="size-[13px]" viewBox="0 0 24 24" fill="none">
-              <rect
-                x="5"
-                y="10"
-                width="14"
-                height="11"
-                rx="2"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <path
-                d="M8 10V7a4 4 0 1 1 8 0v3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          Your resume is yours. Review every change before you download.
-        </footer>
-      </div>
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {features.map((feature) => (
+            <article
+              key={feature.number}
+              className="group rounded-2xl border border-[#E5E9E0] bg-white p-6 transition duration-200 hover:-translate-y-1 hover:border-[#C7D8C1] hover:shadow-[0_15px_45px_-30px_rgba(36,67,43,0.3)] sm:p-7"
+            >
+              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EDF3E8] text-sm font-medium text-[#557A57]">
+                {feature.number}
+              </span>
+              <h3 className="mt-8 text-lg font-semibold tracking-tight">
+                {feature.title}
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-[#758176]">
+                {feature.description}
+              </p>
+              <div className="mt-6 h-px w-full bg-[#EDF0E9] transition-colors group-hover:bg-[#D2E1CB]" />
+              <div className="mt-4 flex items-center gap-2 text-xs font-medium text-[#58765A]">
+                Made for your next step
+                <ArrowIcon />
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section
+        id="how-it-works"
+        className="scroll-mt-10 bg-[#EDF2E8] py-20 sm:py-24 lg:py-28"
+      >
+        <div className="mx-auto max-w-[1260px] px-5 sm:px-8 lg:px-0">
+          <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-20">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#648567]">
+                A simpler workflow
+              </p>
+              <h2 className="mt-4 max-w-md text-3xl font-medium leading-tight tracking-[-0.055em] sm:text-5xl lg:max-w-none">
+                Three steps.
+                <br />
+                One stronger application.
+              </h2>
+              <p className="mt-5 max-w-md leading-7 text-[#718074]">
+                No need to start from scratch every time. Bring your resume,
+                choose your target role, and let Tailr help you refine the
+                match.
+              </p>
+
+              <Link
+                href="/customize"
+                className="mt-8 inline-flex min-h-12 items-center gap-3 rounded-full bg-[#254D38] px-6 text-sm font-medium text-white transition hover:bg-[#193C29]"
+              >
+                Get started with Tailr
+                <ArrowIcon />
+              </Link>
+            </div>
+
+            <div className="divide-y divide-[#D9E3D4]">
+              {steps.map((step) => (
+                <div
+                  key={step.number}
+                  className="grid grid-cols-[44px_1fr] gap-4 py-6 first:pt-0 last:pb-0 sm:grid-cols-[56px_1fr] sm:gap-5 sm:py-8"
+                >
+                  <span className="pt-1 text-sm font-medium text-[#719273]">
+                    {step.number}
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-tight">
+                      {step.title}
+                    </h3>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-[#718074]">
+                      {step.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28">
+        <div className="relative mx-auto max-w-[1260px] overflow-hidden rounded-[28px] bg-[#254D38] px-6 py-14 text-center text-white sm:px-12 lg:px-0 sm:py-20">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-16 -top-36 size-80 rounded-full border border-white/10"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -bottom-52 -left-20 size-96 rounded-full border border-white/10"
+          />
+
+          <div className="relative mx-auto max-w-2xl">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-white/10">
+              <LeafMark />
+            </div>
+            <h2 className="mt-7 text-3xl font-medium leading-tight tracking-[-0.055em] sm:text-5xl">
+              Your next role won't
+              <br className="hidden sm:block" /> find itself.
+            </h2>
+            <p className="mx-auto mt-5 max-w-lg text-sm leading-7 text-[#D1E0D1] sm:text-base">
+              Start with the experience you have. Tailor it to the opportunity
+              you want.
+            </p>
+            <Link
+              href="/customize"
+              className="mt-8 inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-[#F6F7EF] px-7 text-sm font-semibold text-[#254D38] transition hover:-translate-y-0.5 hover:bg-white"
+            >
+              Customize your resume
+              <ArrowIcon />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-[#E5E9E0]">
+        <div className="mx-auto flex max-w-[1260px] flex-col gap-4 px-5 py-7 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-0">
+          <Link href="/" className="flex items-center gap-2">
+            <LeafMark />
+            <span className="font-semibold tracking-tight">
+              tailr<span className="text-[#719274]">.</span>
+            </span>
+          </Link>
+          <div className="flex flex-col gap-1 sm:items-end">
+            <p className="text-xs text-[#829084]">
+              Make every application more intentional.
+            </p>
+            <p className="text-xs text-[#829084]">
+              Crafted by{" "}
+              <a
+                href="https://daniyal-devv.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-[#254D38] transition hover:underline"
+              >
+                Daniyal{" "}
+              </a>
+            </p>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

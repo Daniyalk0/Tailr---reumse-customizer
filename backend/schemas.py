@@ -1,4 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 MAX_RESUME_TEXT_LENGTH = 50_000
 MAX_JOB_DESCRIPTION_LENGTH = 20_000
@@ -47,3 +50,15 @@ class DownloadResumeRequest(BaseModel):
         if not value.strip():
             raise ValueError("Resume text cannot be empty or whitespace only")
         return value
+
+
+class ResumeClaimIssue(BaseModel):
+    claim: str = Field(description="The specific claim in the generated resume.")
+    reason: str = Field(
+        description="Why the claim is unsupported or changes the source meaning."
+    )
+    severity: Literal["high", "medium", "low"]
+
+
+class ResumeValidationResponse(BaseModel):
+    issues: list[ResumeClaimIssue] = Field(default_factory=list)
