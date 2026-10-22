@@ -225,7 +225,7 @@ export default function Dashboard() {
           "The customized resume exceeds the 50,000-character limit.",
         );
       }
-
+      // void refreshQuota();
       setCustomizedResume(result.customized_resume);
       setSuggestedKeywords(
         Array.from(
@@ -237,6 +237,14 @@ export default function Dashboard() {
           ).values(),
         ),
       );
+      void (async () => {
+        const before = await refreshQuota();
+        if (before && before.used === 0) {
+          // Server may not have committed the increment yet — one retry.
+          await new Promise((r) => setTimeout(r, 200));
+          await refreshQuota();
+        }
+      })();
     } catch (cause) {
       setError(
         getClientError(
@@ -377,10 +385,16 @@ export default function Dashboard() {
       const data = await res.json();
       setQuota(data);
       setQuotaState("loaded");
+          return data as {
+            used: number;
+            remaining: number;
+            daily_limit: number;
+          };
     } catch (err) {
       // Deliberately silent — quota is informational only.
       console.warn("Failed to load quota status:", err);
       setQuotaState("error");
+      return null;
     }
   }, []);
 

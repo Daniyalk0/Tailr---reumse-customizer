@@ -93,3 +93,33 @@ def validate_resume_claims(
         raise RuntimeError("The AI returned an empty validation response")
 
     return ResumeValidationResponse.model_validate_json(generated_text)
+
+
+
+
+_NON_WORD_CHARS = re.compile(r"[.*+?^${}()|\[\]\\]")
+
+
+def _keyword_regex(keyword: str) -> re.Pattern[str]:
+    escaped = _NON_WORD_CHARS.sub(r"\\\g<0>", keyword.strip())
+    # \b works poorly for tokens ending in punctuation (C++, Node.js),
+    # so anchor on non-alphanumeric neighbors instead.
+    return re.compile(
+        rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+
+
+def filter_existing_keywords(
+    customized_resume: str,
+    suggested_keywords: list[str],
+) -> list[str]:
+    """Drop suggested keywords that already appear in the customized resume."""
+    kept: list[str] = []
+    for keyword in suggested_keywords:
+        if not keyword.strip():
+            continue
+        if _keyword_regex(keyword).search(customized_resume):
+            continue
+        kept.append(keyword)
+    return kept

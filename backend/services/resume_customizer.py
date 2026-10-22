@@ -1,6 +1,7 @@
 import logging
 import time
 from collections import Counter
+from unittest import result
 
 from fastapi import HTTPException
 
@@ -11,6 +12,7 @@ from backend.services.prompts import (
     build_correction_prompt,
 )
 from backend.services.resume_validation import (
+    filter_existing_keywords,
     validate_resume_claims,
     validate_resume_facts,
 )
@@ -169,7 +171,11 @@ def customize_resume(
                     ),
                 )
 
-        return result
+            result.suggested_keywords = filter_existing_keywords(
+                customized_resume=result.customized_resume,
+                suggested_keywords=result.suggested_keywords,
+            )
+            return result
 
     except HTTPException:
         raise

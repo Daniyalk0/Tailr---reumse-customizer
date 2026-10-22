@@ -181,7 +181,7 @@ MISSING KEYWORDS:
 
 18. Classify requirements internally as demonstrated, partially demonstrated, or missing. Treat related experience as partial evidence, not proof of the exact skill.
 
-19. Do not suggest skills already demonstrated under equivalent terminology. Prioritize important missing or partially demonstrated requirements; exclude irrelevant and duplicate suggestions.
+19. Compare suggested keywords against the final customized_resume output, not only the original resume. Do not suggest any skill, tool, technology, or qualification that appears in the customized_resume. Prioritize important missing or partially demonstrated requirements from the job description; exclude irrelevant and duplicate suggestions.
 
 20. Keep suggested keywords separate from the customized resume. Never add a suggested skill to the resume without independent evidence in the original.
 
