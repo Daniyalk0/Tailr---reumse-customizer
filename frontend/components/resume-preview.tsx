@@ -3,7 +3,6 @@ import type { ChangeEvent } from "react";
 import { DownloadButtons } from "./download-buttons";
 import {
   getSkillsCategories,
-  recommendSkillsCategory,
 } from "../lib/resume-text";
 
 type ResumePreviewProps = {
@@ -441,15 +440,11 @@ export function ResumePreview({
               )}
               <ul className="mt-3 space-y-2">
                 {suggestedKeywords.map((keyword, index) => {
-                  const recommendedCategory = recommendSkillsCategory(
-                    keyword,
-                    skillCategories,
-                  );
-                  const selectedCategory = skillCategories.includes(
-                    selectedCategories[keyword],
-                  )
-                    ? selectedCategories[keyword]
-                    : (recommendedCategory ?? "");
+                const selectedCategory = skillCategories.includes(
+                  selectedCategories[keyword],
+                )
+                  ? selectedCategories[keyword]
+                  : "";
 
                   return (
                     <li

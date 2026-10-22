@@ -11,6 +11,7 @@ const SECTION_HEADINGS = new Set([
   "EMPLOYMENT HISTORY",
   "PROJECTS",
   "PERSONAL PROJECTS",
+  "PROJECT EXPERIENCE",
   "EDUCATION",
   "CERTIFICATIONS",
   "CERTIFICATES",
@@ -58,9 +59,7 @@ function getSkillCategoryLines(resume: string): SkillCategoryLine[] {
   const categoryLines: SkillCategoryLine[] = [];
 
   for (let index = sectionIndex + 1; index < endIndex; index += 1) {
-    const match = lines[index].match(
-      /^\s*(?:[•*‣▪–-]\s*)?([^:]+):\s*(.*)$/,
-    );
+    const match = lines[index].match(/^\s*(?:[•*‣▪–-]\s*)?([^:]+):\s*(.*)$/);
     if (match?.[1].trim()) {
       categoryLines.push({
         index,
@@ -75,49 +74,6 @@ function getSkillCategoryLines(resume: string): SkillCategoryLine[] {
 
 export function getSkillsCategories(resume: string): string[] {
   return getSkillCategoryLines(resume).map(({ name }) => name);
-}
-
-export function recommendSkillsCategory(
-  keyword: string,
-  categories: string[],
-): string | null {
-  const normalizedKeyword = keyword
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  const category = (...terms: string[]) =>
-    categories.find((name) => {
-      const normalizedName = name
-        .toLocaleLowerCase()
-        .replace(/[^a-z0-9]+/g, " ");
-      return terms.some((term) => normalizedName.includes(term));
-    }) ?? null;
-
-  if (
-    /\b(node js|typescript|javascript|python|java|react|next js)\b/.test(
-      normalizedKeyword,
-    )
-  ) {
-    return category("language", "framework") ?? category("backend");
-  }
-  if (
-    /\b(mongodb|mongo|postgresql|postgres|mysql|sqlite|prisma|supabase|firebase|redis|database|sql|authentication|auth|nextauth)\b/.test(
-      normalizedKeyword,
-    )
-  ) {
-    return category("backend", "database");
-  }
-  if (/\b(vitest|jest|testing|test|integration|qa)\b/.test(normalizedKeyword)) {
-    return category("testing", "integration");
-  }
-  if (/\b(redux|zustand|tanstack|context api|state management)\b/.test(normalizedKeyword)) {
-    return category("state", "tool");
-  }
-  if (/\b(git|github|vercel|tailwind|docker|kubernetes)\b/.test(normalizedKeyword)) {
-    return category("tool", "state");
-  }
-
-  return null;
 }
 
 export function insertKeywordInSkillsCategory(
