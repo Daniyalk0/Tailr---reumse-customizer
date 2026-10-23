@@ -130,6 +130,8 @@ def customize_resume_endpoint(
 
     except Exception as exc:
         status_code = get_upstream_status_code(exc)
+        import traceback
+        traceback.print_exc() 
         logger.error(
             "Resume customization failed (%s, upstream HTTP %s): %s",
             type(exc).__name__,

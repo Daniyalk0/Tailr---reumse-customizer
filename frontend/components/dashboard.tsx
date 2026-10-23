@@ -385,11 +385,11 @@ export default function Dashboard() {
       const data = await res.json();
       setQuota(data);
       setQuotaState("loaded");
-          return data as {
-            used: number;
-            remaining: number;
-            daily_limit: number;
-          };
+      return data as {
+        used: number;
+        remaining: number;
+        daily_limit: number;
+      };
     } catch (err) {
       // Deliberately silent — quota is informational only.
       console.warn("Failed to load quota status:", err);

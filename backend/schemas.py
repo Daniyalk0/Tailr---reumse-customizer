@@ -21,7 +21,7 @@ class CustomizeResumeRequest(BaseModel):
 
 class CustomizeResumeResponse(BaseModel):
     customized_resume: str
-    suggested_keywords: list[str]
+    suggested_keywords: list[str] = []
 
     @field_validator("customized_resume")
     @classmethod

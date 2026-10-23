@@ -1,7 +1,6 @@
 import logging
 import time
 from collections import Counter
-from unittest import result
 
 from fastapi import HTTPException
 
@@ -29,7 +28,7 @@ def customize_resume(
     job_description: str,
 ) -> CustomizeResumeResponse:
 
-    prompt = prompt = build_customization_prompt(
+    prompt = build_customization_prompt(
         resume_text=resume_text,
         job_description=job_description,
     )
@@ -171,12 +170,12 @@ def customize_resume(
                     ),
                 )
 
-            result.suggested_keywords = filter_existing_keywords(
-                customized_resume=result.customized_resume,
-                suggested_keywords=result.suggested_keywords,
-            )
-            return result
 
+        result.suggested_keywords = filter_existing_keywords(
+            customized_resume=result.customized_resume,
+            suggested_keywords=result.suggested_keywords,
+        )
+        return result
     except HTTPException:
         raise
 

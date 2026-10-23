@@ -47,13 +47,13 @@ export async function getErrorMessage(response: Response): Promise<string> {
   } catch {
     // Fall through to the generic error below.
   }
-return "Something went wrong. Please try again.";
+  return "Something went wrong. Please try again.";
 }
 
 export function getClientError(cause: unknown, fallback: string): string {
   if (cause instanceof TypeError) {
-    return "We can’t reach our servers. Check your connection and try again.";
+   return cause.message;
   }
 
-return fallback;
+  return fallback;
 }
