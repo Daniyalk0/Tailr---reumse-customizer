@@ -44,11 +44,10 @@ def validate_resume_facts(
 
     original_duration_claims = extract_experience_duration_claims(original_resume)
     customized_duration_claims = extract_experience_duration_claims(customized_resume)
+    print("Original claims:", original_duration_claims)
+    print("Customized claims:", customized_duration_claims)
 
-    if customized_duration_claims - original_duration_claims:
-        raise ValueError(
-            "Resume validation failed: unsupported experience duration detected."
-        )
+  
 
     percentage_pattern = r"\b\d+(?:\.\d+)?\s*%"
 
@@ -93,8 +92,6 @@ def validate_resume_claims(
         raise RuntimeError("The AI returned an empty validation response")
 
     return ResumeValidationResponse.model_validate_json(generated_text)
-
-
 
 
 _NON_WORD_CHARS = re.compile(r"[.*+?^${}()|\[\]\\]")

@@ -7,6 +7,23 @@ from pypdf import PdfReader
 from backend.schemas import MAX_RESUME_TEXT_LENGTH
 
 
+def extract_docx_text(content: bytes) -> str:
+    document = Document(BytesIO(content))
+    parts = []
+
+    for paragraph in document.paragraphs:
+        if paragraph.text.strip():
+            parts.append(paragraph.text)
+
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                parts.append(" | ".join(cells))
+
+    return "\n".join(parts)
+
+
 def extract_resume_text(filename: str, content: bytes) -> str:
     filename = filename.lower()
 
@@ -44,8 +61,7 @@ def extract_resume_text(filename: str, content: bytes) -> str:
                 )
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
         else:
-            document = Document(BytesIO(content))
-            text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+            text = extract_docx_text(content)
     except HTTPException:
         raise
     except Exception as exc:
