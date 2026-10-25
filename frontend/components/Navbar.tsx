@@ -25,27 +25,41 @@ const Navbar = () => {
           >
             Home
           </Link>
-          <a
-            href="#features"
+          <Link
+            href="/#features"
             className="transition-colors hover:text-[#254D38]"
           >
             Features
-          </a>
-          <a
-            href="#how-it-works"
+          </Link>
+          <Link
+            href="/#how-it-works"
             className="transition-colors hover:text-[#254D38]"
           >
             How it works
-          </a>
+          </Link>
+          <Link
+            href="/analyze"
+            className="transition-colors hover:text-[#254D38]"
+          >
+            ATS analyzer
+          </Link>
         </div>
 
-        <Link
-          href="/customize"
-          className="inline-flex items-center gap-2 rounded-full bg-[#254D38] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#193C29]"
-        >
-          Get started
-          <ArrowIcon />
-        </Link>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/analyze"
+            className="inline-flex items-center rounded-full px-2 py-2.5 text-[11px] font-medium text-[#41654A] transition hover:bg-[#EDF1E9] sm:hidden"
+          >
+            ATS analyzer
+          </Link>
+          <Link
+            href="/customize"
+            className="inline-flex items-center gap-2 rounded-full bg-[#254D38] px-3.5 py-2.5 text-xs font-medium text-white transition hover:bg-[#193C29] sm:px-5 sm:text-sm"
+          >
+            Get started
+            <ArrowIcon />
+          </Link>
+        </div>
       </nav>
     </header>
   );

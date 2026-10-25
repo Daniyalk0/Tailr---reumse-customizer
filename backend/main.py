@@ -1,9 +1,9 @@
 import logging
 import os
-import traceback
 from io import BytesIO
 from uuid import UUID
 from fastapi import Header
+from pydantic import ValidationError
 from backend.services.quota_service import (
     get_guest_quota_status,
     reserve_guest_generation,
@@ -29,6 +29,10 @@ from fastapi import Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+
+from backend.schemas import ATSAnalysisRequest, ATSAnalysisResponse
+from backend.services.ats_analyzer import analyze_resume
+from fastapi import File, Form, UploadFile
 
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
@@ -174,6 +178,60 @@ def customize_resume_endpoint(
                 usage_date,
                 succeeded,
             )
+
+
+@app.post("/analyze-resume", response_model=ATSAnalysisResponse)
+async def analyze_resume_endpoint(
+    file: UploadFile | None = File(default=None),
+    resume_text: str | None = Form(default=None),
+    job_description: str | None = Form(default=None),
+):
+    if file is not None and resume_text is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide a file or resume text, not both.",
+        )
+
+    if file is not None:
+        filename = file.filename or ""
+
+        if not filename.lower().endswith((".pdf", ".docx")):
+            raise HTTPException(
+                status_code=400,
+                detail="Only PDF and DOCX files are supported.",
+            )
+
+        content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+
+        if len(content) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="The uploaded file exceeds the 10 MB limit.",
+            )
+
+        resume_text = extract_resume_text(filename, content)
+
+    try:
+        request_data = ATSAnalysisRequest(
+            resume_text=resume_text,
+            job_description=job_description,
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_input=False),
+        ) from exc
+
+    try:
+        return analyze_resume(
+            resume_text=request_data.resume_text,
+            job_description=request_data.job_description,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="ATS analysis is temporarily unavailable. Please try again.",
+        ) from exc
 
 
 @app.post("/download-resume/docx")

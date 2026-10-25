@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
-from pydantic import BaseModel, Field
 
 MAX_RESUME_TEXT_LENGTH = 50_000
 MAX_JOB_DESCRIPTION_LENGTH = 20_000
@@ -62,3 +61,35 @@ class ResumeClaimIssue(BaseModel):
 
 class ResumeValidationResponse(BaseModel):
     issues: list[ResumeClaimIssue] = Field(default_factory=list)
+
+
+
+class ATSAnalysisRequest(BaseModel):
+    resume_text: str = Field(max_length=MAX_RESUME_TEXT_LENGTH)
+    job_description: str | None = Field(
+        default=None,
+        max_length=MAX_JOB_DESCRIPTION_LENGTH,
+    )
+
+    @field_validator("resume_text")
+    @classmethod
+    def reject_blank_resume(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Resume text cannot be empty")
+        return value
+
+    @field_validator("job_description")
+    @classmethod
+    def reject_blank_job_description(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            return None
+        return value
+
+
+class ATSAnalysisResponse(BaseModel):
+    formatting_score: int = Field(ge=0, le=100)
+    job_match_score: int | None = Field(default=None, ge=0, le=100)
+    matched_keywords: list[str] = Field(default_factory=list)
+    missing_keywords: list[str] = Field(default_factory=list)
+    formatting_issues: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)

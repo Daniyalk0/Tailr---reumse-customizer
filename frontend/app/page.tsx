@@ -1,4 +1,3 @@
-import Navbar from "@/components/Navbar";
 import Link from "next/link";
 
 const features = [
@@ -19,6 +18,12 @@ const features = [
     title: "Ready to download",
     description:
       "Download your customized resume as a PDF or DOCX and prepare it for your next application.",
+  },
+  {
+    number: "04",
+    title: "Check ATS readiness",
+    description:
+      "Review resume formatting and, optionally, compare keywords against a job description.",
   },
 ];
 
@@ -130,11 +135,12 @@ export default function Home() {
 
             <p className="mt-7 max-w-lg text-base leading-7 text-[#69776D] sm:text-lg sm:leading-8">
               A resume should speak the language of the role you want. Tailr
-              helps you tailor your existing experience to each opportunity,
-              without losing what makes it yours.
+              helps you tailor your existing experience to each opportunity
+              and check how your resume is likely to read, without losing what
+              makes it yours.
             </p>
 
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 href="/customize"
                 className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-[#254D38] px-7 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#193C29]"
@@ -143,9 +149,17 @@ export default function Home() {
                 <ArrowIcon />
               </Link>
 
+              <Link
+                href="/analyze"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full border border-[#D6E3D0] bg-white/70 px-6 text-sm font-medium text-[#34583D] transition hover:-translate-y-0.5 hover:bg-[#F0F5EB]"
+              >
+                Check ATS readiness
+                <ArrowIcon />
+              </Link>
+
               <a
                 href="#how-it-works"
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-medium text-[#47614E] transition hover:bg-[#EDF1E9]"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium text-[#47614E] transition hover:bg-[#EDF1E9]"
               >
                 See how it works
                 <ArrowIcon diagonal />
@@ -330,11 +344,12 @@ export default function Home() {
 
       {/* Feature strip */}
       <section className="border-y border-[#E6E9E0] bg-[#F3F5EF]">
-        <div className="mx-auto grid max-w-[1260px] grid-cols-1 gap-7 px-5 py-8 sm:grid-cols-3 sm:gap-5 sm:px-8 lg:px-0">
+        <div className="mx-auto grid max-w-[1260px] grid-cols-1 gap-7 px-5 py-8 sm:grid-cols-2 sm:gap-5 sm:px-8 lg:grid-cols-4 lg:px-0">
           {[
             "Built around your real experience",
             "Matched to the role you're targeting",
             "Exportable, editable resume files",
+            "ATS formatting and keyword insights",
           ].map((item) => (
             <div
               key={item}
@@ -369,7 +384,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
+        <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {features.map((feature) => (
             <article
               key={feature.number}
@@ -416,13 +431,22 @@ export default function Home() {
                 match.
               </p>
 
-              <Link
-                href="/customize"
-                className="mt-8 inline-flex min-h-12 items-center gap-3 rounded-full bg-[#254D38] px-6 text-sm font-medium text-white transition hover:bg-[#193C29]"
-              >
-                Get started with Tailr
-                <ArrowIcon />
-              </Link>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/customize"
+                  className="inline-flex min-h-12 items-center gap-3 rounded-full bg-[#254D38] px-6 text-sm font-medium text-white transition hover:bg-[#193C29]"
+                >
+                  Customize your resume
+                  <ArrowIcon />
+                </Link>
+                <Link
+                  href="/analyze"
+                  className="inline-flex min-h-12 items-center gap-3 rounded-full border border-[#C9D8C8] bg-white/60 px-6 text-sm font-medium text-[#34583D] transition hover:bg-white"
+                >
+                  Analyze ATS readiness
+                  <ArrowIcon />
+                </Link>
+              </div>
             </div>
 
             <div className="divide-y divide-[#D9E3D4]">
@@ -466,20 +490,29 @@ export default function Home() {
               <LeafMark />
             </div>
             <h2 className="mt-7 text-3xl font-medium leading-tight tracking-[-0.055em] sm:text-5xl">
-              Your next role won't
+              Your next role won&apos;t
               <br className="hidden sm:block" /> find itself.
             </h2>
             <p className="mx-auto mt-5 max-w-lg text-sm leading-7 text-[#D1E0D1] sm:text-base">
-              Start with the experience you have. Tailor it to the opportunity
+              Start by checking your resume or tailoring it to the opportunity
               you want.
             </p>
-            <Link
-              href="/customize"
-              className="mt-8 inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-[#F6F7EF] px-7 text-sm font-semibold text-[#254D38] transition hover:-translate-y-0.5 hover:bg-white"
-            >
-              Customize your resume
-              <ArrowIcon />
-            </Link>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link
+                href="/customize"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-[#F6F7EF] px-7 text-sm font-semibold text-[#254D38] transition hover:-translate-y-0.5 hover:bg-white"
+              >
+                Customize your resume
+                <ArrowIcon />
+              </Link>
+              <Link
+                href="/analyze"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full border border-white/30 px-7 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/10"
+              >
+                Check ATS readiness
+                <ArrowIcon />
+              </Link>
+            </div>
           </div>
         </div>
       </section>
