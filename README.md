@@ -5,6 +5,7 @@ Tailr helps job seekers adapt an existing resume to a specific job description. 
 ## Features
 
 - Upload a PDF or DOCX resume (up to 10 MB) and review or edit its extracted text.
+- Analyze resume formatting and optionally compare it with a job description at `/analyze`.
 - Paste a job description (up to 20,000 characters).
 - Generate an AI-customized resume with suggested keywords for relevant qualifications that are missing or only partly supported.
 - Review and edit the generated resume and download it as PDF or DOCX.
