@@ -1,5 +1,7 @@
 import re
 from collections import Counter
+from uuid import UUID
+from fastapi import HTTPException
 
 from backend.schemas import ResumeValidationResponse
 from backend.services.llm_client import client
@@ -9,15 +11,22 @@ from backend.services.prompts import build_validation_prompt
 def extract_experience_duration_claims(text: str) -> set[str]:
     """Find explicit claims about years of professional experience."""
     pattern = (
-        r"\b(?:over\s+|more than\s+|at least\s+)?"
-        r"\d+\+?\s+years?"
+        r"\b(?:(?P<qualifier>over|more than|at least)\s+)?"
+        r"(?P<duration>\d+\+?)\s+years?"
         r"(?:\s+of)?\s+(?:professional\s+)?experience\b"
     )
 
-    return {
-        re.sub(r"\s+", " ", claim.lower()).strip()
-        for claim in re.findall(pattern, text, re.IGNORECASE)
-    }
+    claims = set()
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        qualifier = (match.group("qualifier") or "").lower()
+        duration = match.group("duration").lower()
+        if qualifier in {"over", "more than"}:
+            qualifier = "more than"
+        elif duration.endswith("+") and not qualifier:
+            qualifier = "at least"
+        duration = duration.removesuffix("+")
+        claims.add(" ".join(part for part in (qualifier, duration) if part))
+    return claims
 
 
 def validate_resume_facts(
@@ -44,10 +53,10 @@ def validate_resume_facts(
 
     original_duration_claims = extract_experience_duration_claims(original_resume)
     customized_duration_claims = extract_experience_duration_claims(customized_resume)
-    print("Original claims:", original_duration_claims)
-    print("Customized claims:", customized_duration_claims)
-
-  
+    if customized_duration_claims - original_duration_claims:
+        raise ValueError(
+            "Resume validation failed: unsupported experience duration claims detected."
+        )
 
     percentage_pattern = r"\b\d+(?:\.\d+)?\s*%"
 
@@ -120,3 +129,13 @@ def filter_existing_keywords(
             continue
         kept.append(keyword)
     return kept
+
+
+def validate_guest_id(guest_id: str) -> str:
+    try:
+        return str(UUID(guest_id))
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="A valid guest ID is required.",
+        ) from None

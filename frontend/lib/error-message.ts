@@ -17,6 +17,9 @@ export async function getErrorMessage(response: Response): Promise<string> {
         if ("code" in detail && detail.code === "DAILY_QUOTA_EXCEEDED") {
           return "You've used your daily resume generation. Try again tomorrow.";
         }
+        if ("code" in detail && detail.code === "ATS_DAILY_QUOTA_EXCEEDED") {
+          return "You've used your daily job-match analysis. Formatting-only analysis is still available; try job matching again tomorrow.";
+        }
       }
 
       if (typeof detail === "string") {

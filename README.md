@@ -36,6 +36,8 @@ The application does not store resumes, job descriptions, or user accounts. The 
 
 The customize page shows the guest's remaining generations for the current UTC day and refreshes after a successful generation. When the quota is exhausted, the page indicates when the next generation becomes available. This indicator is informational only; the backend enforces the limit independently.
 
+In the ATS analyzer, formatting-only analysis is free. Adding a job description uses one daily ATS analysis; its remaining quota is fetched from the backend and refreshes after job matching.
+
 The application does not store resumes in a database or provide accounts or resume history. Resume text and the job description are sent to Gemini when customization is requested.
 
 ## Project structure

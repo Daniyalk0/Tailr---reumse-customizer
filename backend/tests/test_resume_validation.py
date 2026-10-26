@@ -27,6 +27,13 @@ def test_rejects_unsupported_experience_duration():
         )
 
 
+def test_accepts_unchanged_experience_duration():
+    validate_resume_facts(
+        "Developer with 5 years of professional experience.",
+        "Developer with 5 years of experience.",
+    )
+
+
 def test_accepts_unchanged_email_and_supported_facts():
     validate_resume_facts(
         "Email: original@example.com. Improved performance by 20%.",

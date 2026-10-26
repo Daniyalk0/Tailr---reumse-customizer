@@ -8,6 +8,9 @@ from backend.services.quota_service import (
     get_guest_quota_status,
     reserve_guest_generation,
     finalize_guest_generation,
+    finalize_guest_ats_analysis,
+    reserve_guest_ats_analysis,
+    ATS_DAILY_LIMIT
 )
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,12 +37,16 @@ from backend.schemas import ATSAnalysisRequest, ATSAnalysisResponse
 from backend.services.ats_analyzer import analyze_resume
 from fastapi import File, Form, UploadFile
 
+from backend.services.resume_validation import validate_guest_id
+
+
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 
 app = FastAPI()
 
 limiter = Limiter(key_func=get_remote_address)
+
 
 app.state.limiter = limiter
 app.add_exception_handler(
@@ -65,7 +72,8 @@ def home():
 
 
 @app.post("/upload-resume")
-async def upload_resume(file: UploadFile = File(...)):
+@limiter.limit("10/minute")
+async def upload_resume(request:Request, file: UploadFile = File(...)):
     filename = file.filename or ""
     if not filename.lower().endswith((".pdf", ".docx")):
         raise HTTPException(
@@ -99,13 +107,7 @@ def customize_resume_endpoint(
     guest_id: str = Header(..., alias="X-Guest-ID"),
 ):
     # Accept only UUID-form guest identifiers.
-    try:
-        guest_id = str(UUID(guest_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="A valid guest ID is required.",
-        ) from None
+    guest_id = validate_guest_id(guest_id)
 
     usage_date = reserve_guest_generation(guest_id)
     succeeded = False
@@ -181,10 +183,13 @@ def customize_resume_endpoint(
 
 
 @app.post("/analyze-resume", response_model=ATSAnalysisResponse)
+@limiter.limit("5/minute")
 async def analyze_resume_endpoint(
+    request: Request,
     file: UploadFile | None = File(default=None),
     resume_text: str | None = Form(default=None),
     job_description: str | None = Form(default=None),
+    guest_id: str = Header(..., alias="X-Guest-ID"),
 ):
     if file is not None and resume_text is not None:
         raise HTTPException(
@@ -222,22 +227,65 @@ async def analyze_resume_endpoint(
             detail=exc.errors(include_input=False),
         ) from exc
 
+    guest_id = validate_guest_id(guest_id)
+
+    requires_ats_quota = bool(
+        request_data.job_description and request_data.job_description.strip()
+    )
+
+    # Formatting-only analysis is free.
+    if not requires_ats_quota:
+        try:
+            return analyze_resume(
+                resume_text=request_data.resume_text,
+                job_description=None,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=("ATS analysis is temporarily unavailable. Please try again."),
+            ) from exc
+
+    # Reserve one ATS use before running job matching.
+    usage_date = reserve_guest_ats_analysis(guest_id)
+    succeeded = False
+
     try:
-        return analyze_resume(
+        result = analyze_resume(
             resume_text=request_data.resume_text,
             job_description=request_data.job_description,
         )
+        succeeded = True
+        return result
+
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
             detail="ATS analysis is temporarily unavailable. Please try again.",
         ) from exc
 
+    finally:
+        try:
+            finalize_guest_ats_analysis(
+                guest_id,
+                usage_date,
+                succeeded=succeeded,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to finalize ATS quota reservation "
+                "(guest_id=%s, usage_date=%s, succeeded=%s)",
+                guest_id,
+                usage_date,
+                succeeded,
+            )
+
 
 @app.post("/download-resume/docx")
-def download_resume_docx(request: DownloadResumeRequest):
+@limiter.limit("10/minute")
+def download_resume_docx(request: Request, body: DownloadResumeRequest):
     try:
-        docx_bytes = generate_docx(request.resume_text)
+        docx_bytes = generate_docx(body.resume_text)
 
         return StreamingResponse(
             BytesIO(docx_bytes),
@@ -258,9 +306,10 @@ def download_resume_docx(request: DownloadResumeRequest):
 
 
 @app.post("/download-resume/pdf")
-def download_resume_pdf(request: DownloadResumeRequest):
+@limiter.limit("10/minute")
+def download_resume_pdf(request: Request, body: DownloadResumeRequest):
     try:
-        pdf_bytes = generate_pdf(request.resume_text)
+        pdf_bytes = generate_pdf(body.resume_text)
 
         return StreamingResponse(
             BytesIO(pdf_bytes),
@@ -278,7 +327,9 @@ def download_resume_pdf(request: DownloadResumeRequest):
 
 
 @app.get("/quota-status")
+@limiter.limit("30/minute")
 def quota_status_endpoint(
+    request: Request,
     guest_id: str = Header(..., alias="X-Guest-ID"),
 ):
     try:

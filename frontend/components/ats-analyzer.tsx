@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { ErrorToast } from "@/components/ErrorToast";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -13,6 +13,18 @@ const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_RESUME_TEXT_LENGTH = 50_000;
 const MAX_JOB_DESCRIPTION_LENGTH = 20_000;
 
+function getGuestId(): string {
+  const storageKey = "resume_customizer_guest_id";
+  let guestId = localStorage.getItem(storageKey);
+
+  if (!guestId) {
+    guestId = crypto.randomUUID();
+    localStorage.setItem(storageKey, guestId);
+  }
+
+  return guestId;
+}
+
 type ATSAnalysisResponse = {
   formatting_score: number;
   job_match_score: number | null;
@@ -20,6 +32,13 @@ type ATSAnalysisResponse = {
   missing_keywords: string[];
   formatting_issues: string[];
   recommendations: string[];
+};
+
+type ATSQuota = {
+  usage_date: string;
+  ats_daily_limit: number;
+  ats_used: number;
+  ats_remaining: number;
 };
 
 function isStringArray(value: unknown): value is string[] {
@@ -211,6 +230,60 @@ export default function ATSAnalyzer() {
   const [result, setResult] = useState<ATSAnalysisResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState("");
+  const [atsQuota, setAtsQuota] = useState<ATSQuota | null>(null);
+  const [quotaState, setQuotaState] = useState<
+    "loading" | "loaded" | "error"
+  >("loading");
+  const requestInFlight = useRef(false);
+
+  const refreshATSQuota = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quota-status`, {
+        headers: { "X-Guest-ID": getGuestId() },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data: unknown = await response.json();
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        !("usage_date" in data) ||
+        typeof data.usage_date !== "string" ||
+        !("ats_daily_limit" in data) ||
+        typeof data.ats_daily_limit !== "number" ||
+        !("ats_used" in data) ||
+        typeof data.ats_used !== "number" ||
+        !("ats_remaining" in data) ||
+        typeof data.ats_remaining !== "number"
+      ) {
+        throw new Error("The backend returned an invalid ATS quota status.");
+      }
+
+      setAtsQuota({
+        usage_date: data.usage_date,
+        ats_daily_limit: data.ats_daily_limit,
+        ats_used: data.ats_used,
+        ats_remaining: data.ats_remaining,
+      });
+      setQuotaState("loaded");
+    } catch (cause) {
+      console.warn("Failed to load ATS quota status:", cause);
+      setQuotaState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshATSQuota();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [refreshATSQuota]);
+   useEffect(() => {
+     console.log("ATS quota updated:", atsQuota);
+   }, [atsQuota]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const selectedFile = event.target.files?.[0] ?? null;
@@ -256,7 +329,7 @@ export default function ATSAnalyzer() {
  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
    event.preventDefault();
 
-   if (isAnalyzing) return;
+   if (requestInFlight.current) return;
 
    if (inputMode === "upload" && !file) {
      setError("Choose a PDF or DOCX resume to analyze.");
@@ -290,6 +363,7 @@ export default function ATSAnalyzer() {
      requestBody.append("job_description", jobDescription.trim());
    }
 
+   requestInFlight.current = true;
    setIsAnalyzing(true);
    setError("");
    setResult(null);
@@ -297,10 +371,26 @@ export default function ATSAnalyzer() {
    try {
      const response = await fetch(`${API_BASE_URL}/analyze-resume`, {
        method: "POST",
+       headers: { "X-Guest-ID": getGuestId() },
        body: requestBody,
      });
 
      if (!response.ok) {
+       const responseBody: unknown = await response
+         .clone()
+         .json()
+         .catch(() => null);
+       if (
+         typeof responseBody === "object" &&
+         responseBody !== null &&
+         "detail" in responseBody &&
+         typeof responseBody.detail === "object" &&
+         responseBody.detail !== null &&
+         "code" in responseBody.detail &&
+         responseBody.detail.code === "ATS_DAILY_QUOTA_EXCEEDED"
+       ) {
+         void refreshATSQuota();
+       }
        throw new Error(await getErrorMessage(response));
      }
 
@@ -313,13 +403,19 @@ export default function ATSAnalyzer() {
      }
 
      setResult(responseData);
+     if (jobDescription.trim()) {
+       await refreshATSQuota();
+     }
    } catch (cause) {
      setError(
-       cause instanceof Error && cause.message
-         ? cause.message
-         : "Could not analyze the resume. Please try again.",
+       cause instanceof TypeError
+         ? "Could not reach the analysis service. Check your connection and try again."
+         : cause instanceof Error && cause.message
+           ? cause.message
+           : "Could not analyze the resume. Please try again.",
      );
    } finally {
+     requestInFlight.current = false;
      setIsAnalyzing(false);
    }
  }
@@ -349,6 +445,46 @@ export default function ATSAnalyzer() {
             Review formatting and, if you add a job description, see how your
             resume aligns with the role.
           </p>
+          {quotaState === "loaded" && atsQuota && (
+            <div
+              className={`mt-4 flex items-center justify-center gap-2 rounded-[10px] border px-3 py-2 text-[12.5px] leading-[1.5] sm:justify-start ${
+                atsQuota.ats_remaining > 0
+                  ? "border-[#e1e9e1] bg-white/70 text-[#66736a]"
+                  : "border-[#f2d9c8] bg-[#fdf3ec] text-[#8a4a22]"
+              }`}
+              role="status"
+            >
+              <span className="mt-[2px] font-semibold">
+                {atsQuota.ats_remaining > 0 ? "●" : "!"}
+              </span>
+              <span>
+                {atsQuota.ats_remaining > 0 ? (
+                  <>
+                    <strong className="text-[#1f2b24]">
+                      {atsQuota.ats_remaining} of {atsQuota.ats_daily_limit}
+                    </strong>{" "}
+                    job-match analysis
+                    {atsQuota.ats_daily_limit === 1 ? "" : "es"}{" "}
+                    remaining today.
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-[#8a4a22]">
+                      You&apos;ve used today&apos;s job-match analysis.
+                    </strong>{" "}
+                    Formatting-only analysis remains available; job matching
+                    resets at midnight UTC.
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+          {quotaState === "error" && (
+            <p className="mb-0 mt-3 text-[12px] text-[#8a8f8a]">
+              Couldn&apos;t load the ATS quota status — you can still analyze
+              your resume.
+            </p>
+          )}
         </header>
 
         {error && (
@@ -517,7 +653,9 @@ export default function ATSAnalyzer() {
                 type="submit"
                 disabled={isAnalyzing}
               >
-                Analyze my resume
+                {jobDescription.trim()
+                  ? "Check job match"
+                  : "Analyze my resume"}
                 <svg className="size-[17px]" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path
                     d="M4 10h12m-5-5 5 5-5 5"
@@ -529,7 +667,8 @@ export default function ATSAnalyzer() {
                 </svg>
               </button>
               <p className="mb-0 mt-2.5 text-center text-[10px] leading-normal text-[#89948b]">
-                Add a job description for keyword matching and a match score.
+                Formatting-only analysis is free. Adding a job description uses
+                one daily ATS analysis for keyword matching and a match score.
               </p>
             </form>
           </section>
