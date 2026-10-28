@@ -106,11 +106,11 @@ JOB-MATCHING ANALYSIS:
 
 RESUME CUSTOMIZATION:
 
-8. Return the COMPLETE customized resume. Preserve contact information,
-   meaningful original sections, relevant projects or experience,
-   education, qualifications, dates, and other useful details.
-   Do not return a summary of the resume or silently remove meaningful
-   content simply because it is less relevant to the target position.
+8. Return the COMPLETE customized resume. Preserve contact information, meaningful original sections, relevant projects or experience, education, qualifications, dates, and other useful details.
+
+Preserve the original section names and their semantic classifications. Do not rename, merge, split, or reclassify sections in ways that change their meaning or misrepresent the candidate's background. For example, keep projects under Projects and employment under Professional Experience or Work Experience. Never reclassify a personal or academic project as professional experience simply because its work is relevant to the target job.
+
+You may reorder sections to prioritize relevance to the target position, but do not silently remove meaningful content simply because it is less relevant to the target position.
 
 9. Tailor the headline and professional summary to the target job.
    Select a headline that accurately reflects the candidate's demonstrated

@@ -11,6 +11,21 @@ from backend.schemas import ATSAnalysisResponse
 def _client() -> TestClient:
     return TestClient(main.app, client=(str(uuid4()), 50000))
 
+VALID_RESUME_TEXT = """
+John Doe
+john@example.com
++1 555 123 4567
+
+Experience
+Software Developer, 2022-2025
+
+Education
+Bachelor of Computer Science
+
+Skills
+Python, FastAPI, SQL
+"""
+
 
 def test_formatting_analysis_does_not_reserve_ats_quota(monkeypatch):
     guest_id = str(uuid4())
@@ -23,13 +38,13 @@ def test_formatting_analysis_does_not_reserve_ats_quota(monkeypatch):
     response = _client().post(
         "/analyze-resume",
         headers={"X-Guest-ID": guest_id},
-        data={"resume_text": "Resume content"},
+        data={"resume_text": VALID_RESUME_TEXT},
     )
 
     assert response.status_code == 200
     assert response.json()["formatting_score"] == 85
     analyze.assert_called_once_with(
-        resume_text="Resume content",
+        resume_text=VALID_RESUME_TEXT,
         job_description=None,
     )
     reserve.assert_not_called()
@@ -52,7 +67,7 @@ def test_job_match_analysis_finalizes_successful_quota(monkeypatch):
         "/analyze-resume",
         headers={"X-Guest-ID": guest_id},
         data={
-            "resume_text": "Resume content",
+            "resume_text": VALID_RESUME_TEXT,
             "job_description": "Job requirements",
         },
     )
@@ -82,7 +97,7 @@ def test_job_match_failure_releases_ats_quota(monkeypatch):
         "/analyze-resume",
         headers={"X-Guest-ID": guest_id},
         data={
-            "resume_text": "Resume content",
+            "resume_text": VALID_RESUME_TEXT,
             "job_description": "Job requirements",
         },
     )

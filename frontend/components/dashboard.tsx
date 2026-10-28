@@ -10,6 +10,7 @@ import { ResumeUpload } from "./resume-upload";
 import { insertKeywordInSkillsCategory } from "../lib/resume-text";
 import { getClientError, getErrorMessage } from "@/lib/error-message";
 import { ErrorToast } from "../components/ErrorToast";
+import { validatePdfPageLimit } from "@/lib/validate-pdf";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
@@ -17,6 +18,23 @@ const API_BASE_URL =
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_RESUME_TEXT_LENGTH = 50_000;
 const MAX_JOB_DESCRIPTION_LENGTH = 20_000;
+const REQUEST_TIMEOUT_MS = 90_000;
+
+function createRequestTimeout() {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => window.clearTimeout(timeoutId),
+  };
+}
 
 type BusyAction = "upload" | "customize" | "pdf" | "docx" | null;
 
@@ -41,16 +59,32 @@ export default function Dashboard() {
     "idle" | "loading" | "loaded" | "error"
   >("idle");
 
-  function handleFileChange(selectedFile: File | null) {
-    if (!selectedFile) {
-      return;
-    }
-    if (selectedFile && !/\.(pdf|docx)$/i.test(selectedFile.name)) {
+  async function handleFileChange(selectedFile: File | null) {
+    if (!selectedFile) return;
+
+    if (!/\.(pdf|docx)$/i.test(selectedFile.name)) {
       setError("Choose a file with a .pdf or .docx extension.");
       return;
     }
-    if (selectedFile && selectedFile.size > MAX_UPLOAD_SIZE_BYTES) {
+
+    if (selectedFile.size > MAX_UPLOAD_SIZE_BYTES) {
       setError("The selected file exceeds the 10 MB limit.");
+      return;
+    }
+
+    if (selectedFile.size === 0) {
+      setError("The selected file is empty.");
+      return;
+    }
+
+    try {
+      await validatePdfPageLimit(selectedFile);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not validate the PDF. Please try another file.",
+      );
       return;
     }
 
@@ -60,11 +94,6 @@ export default function Dashboard() {
     setSuggestedKeywords([]);
     setUploadFailed(false);
     setError("");
-
-    if (selectedFile.size === 0) {
-      setError("The selected file is empty.");
-      return;
-    }
 
     void handleUpload(selectedFile);
   }
@@ -95,7 +124,7 @@ export default function Dashboard() {
     setUploadFailed(false);
     setCustomizedResume("");
     setSuggestedKeywords([]);
-
+    const requestTimeout = createRequestTimeout();
     try {
       const formData = new FormData();
       formData.append("file", uploadFile);
@@ -103,6 +132,7 @@ export default function Dashboard() {
       const response = await fetch(`${API_BASE_URL}/upload-resume`, {
         method: "POST",
         body: formData,
+        signal: requestTimeout.signal,
       });
 
       if (!response.ok) {
@@ -131,10 +161,16 @@ export default function Dashboard() {
       setUploadFailed(false);
     } catch (cause) {
       setError(
-        getClientError(cause, "Could not upload the resume. Please try again."),
+        requestTimeout.didTimeout()
+          ? "Resume upload timed out after 90 seconds. Check your connection and try again."
+          : getClientError(
+              cause,
+              "Could not upload the resume. Please try again.",
+            ),
       );
       setUploadFailed(true);
     } finally {
+      requestTimeout.cleanup();
       requestInFlight.current = false;
       setBusy(null);
     }
@@ -182,7 +218,7 @@ export default function Dashboard() {
     setError("");
     setCustomizedResume("");
     setSuggestedKeywords([]);
-
+    const requestTimeout = createRequestTimeout();
     try {
       const response = await fetch(`${API_BASE_URL}/customize-resume`, {
         method: "POST",
@@ -194,6 +230,7 @@ export default function Dashboard() {
           resume_text: resumeText,
           job_description: jobDescription,
         }),
+        signal: requestTimeout.signal,
       });
 
       if (!response.ok) {
@@ -246,13 +283,17 @@ export default function Dashboard() {
         }
       })();
     } catch (cause) {
+      handleDownload;
       setError(
-        getClientError(
-          cause,
-          "Could not customize the resume. Please try again.",
-        ),
+        requestTimeout.didTimeout()
+          ? "Resume customization timed out after 90 seconds. Please try again."
+          : getClientError(
+              cause,
+              "Could not customize the resume. Please try again.",
+            ),
       );
     } finally {
+      requestTimeout.cleanup();
       requestInFlight.current = false;
       setBusy(null);
     }
@@ -274,7 +315,7 @@ export default function Dashboard() {
     requestInFlight.current = true;
     setBusy(format);
     setError("");
-
+    const requestTimeout = createRequestTimeout();
     try {
       const body =
         format === "pdf"
@@ -289,6 +330,7 @@ export default function Dashboard() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal: requestTimeout.signal,
         },
       );
 
@@ -306,12 +348,15 @@ export default function Dashboard() {
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
     } catch (cause) {
       setError(
-        getClientError(
-          cause,
-          `Could not download the ${format.toUpperCase()} resume.`,
-        ),
+        requestTimeout.didTimeout()
+          ? `${format.toUpperCase()} download timed out after 90 seconds. Please try again.`
+          : getClientError(
+              cause,
+              `Could not download the ${format.toUpperCase()} resume.`,
+            ),
       );
     } finally {
+      requestTimeout.cleanup();
       requestInFlight.current = false;
       setBusy(null);
     }

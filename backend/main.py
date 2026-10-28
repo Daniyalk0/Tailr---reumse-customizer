@@ -38,7 +38,7 @@ from backend.services.ats_analyzer import analyze_resume
 from fastapi import File, Form, UploadFile
 
 from backend.services.resume_validation import validate_guest_id
-
+from backend.services.resume_validation import validate_resume_content
 
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
@@ -227,6 +227,13 @@ async def analyze_resume_endpoint(
             detail=exc.errors(include_input=False),
         ) from exc
 
+    if len(request_data.resume_text) > MAX_RESUME_TEXT_LENGTH:
+        raise HTTPException(
+            status_code=413,
+            detail="Resume text exceeds the maximum character limit.",
+        )
+
+    validate_resume_content(request_data.resume_text)
     guest_id = validate_guest_id(guest_id)
 
     requires_ats_quota = bool(

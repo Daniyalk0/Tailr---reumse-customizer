@@ -7,6 +7,21 @@ from fastapi.testclient import TestClient
 import backend.main as main
 from backend.schemas import ATSAnalysisResponse
 
+VALID_RESUME_TEXT = """
+John Doe
+john@example.com
++1 555 123 4567
+
+Experience
+Software Developer, 2022-2025
+
+Education
+Bachelor of Computer Science
+
+Skills
+Python, FastAPI, SQL
+"""
+
 
 @pytest.mark.parametrize(
     ("method", "path", "limit"),
@@ -24,7 +39,7 @@ def test_endpoint_rate_limits(method, path, limit, monkeypatch):
     monkeypatch.setattr(
         main,
         "extract_resume_text",
-        lambda **kwargs: "Resume content",
+        lambda **kwargs: VALID_RESUME_TEXT,
     )
     monkeypatch.setattr(
         main,
@@ -83,7 +98,7 @@ def test_endpoint_rate_limits(method, path, limit, monkeypatch):
                 method,
                 path,
                 headers=headers,
-                data={"resume_text": "Resume content"},
+                data={"resume_text": VALID_RESUME_TEXT},
             )
         if path.startswith("/download-resume/"):
             return client.request(

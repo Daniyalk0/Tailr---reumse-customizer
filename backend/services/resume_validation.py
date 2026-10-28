@@ -139,3 +139,63 @@ def validate_guest_id(guest_id: str) -> str:
             status_code=400,
             detail="A valid guest ID is required.",
         ) from None
+
+
+def validate_resume_content(text: str) -> None:
+    """Reject documents that are unlikely to contain resume content."""
+
+    normalized = re.sub(r"\s+", " ", text).strip()
+
+    if len(normalized) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail="The document contains too little text to be a valid resume.",
+        )
+
+    resume_indicators = (
+        "experience",
+        "work experience",
+        "professional experience",
+        "employment history",
+        "work history",
+        "education",
+        "educational background",
+        "academic background",
+        "skills",
+        "technical skills",
+        "core competencies",
+        "projects",
+        "personal projects",
+        "professional summary",
+        "summary",
+        "career objective",
+        "objective",
+        "internship",
+        "internships",
+        "certification",
+        "certifications",
+        "licenses",
+        "achievements",
+        "responsibilities",
+    )
+
+    indicator_count = sum(
+        1
+        for indicator in resume_indicators
+        if re.search(
+            rf"(?<![a-z]){re.escape(indicator)}(?![a-z])",
+            normalized,
+            re.IGNORECASE,
+        )
+    )
+
+    has_contact = bool(
+        re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", normalized, re.I)
+        or re.search(r"\b(?:\+?\d[\d\s().-]{8,}\d)\b", normalized)
+    )
+
+    if indicator_count == 0 and not has_contact:
+        raise HTTPException(
+            status_code=400,
+            detail="This document doesn't appear to be a resume. Please upload a valid resume.",
+        )

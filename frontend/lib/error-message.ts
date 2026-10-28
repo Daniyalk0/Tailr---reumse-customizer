@@ -54,8 +54,8 @@ export async function getErrorMessage(response: Response): Promise<string> {
 }
 
 export function getClientError(cause: unknown, fallback: string): string {
-  if (cause instanceof TypeError) {
-   return cause.message;
+  if (cause instanceof Error && cause.message) {
+    return cause.message;
   }
 
   return fallback;

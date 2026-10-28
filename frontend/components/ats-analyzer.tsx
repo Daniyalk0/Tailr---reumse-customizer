@@ -12,6 +12,23 @@ const API_BASE_URL =
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_RESUME_TEXT_LENGTH = 50_000;
 const MAX_JOB_DESCRIPTION_LENGTH = 20_000;
+const REQUEST_TIMEOUT_MS = 90_000;
+
+function createRequestTimeout() {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => window.clearTimeout(timeoutId),
+  };
+}
 
 function getGuestId(): string {
   const storageKey = "resume_customizer_guest_id";
@@ -367,12 +384,14 @@ export default function ATSAnalyzer() {
    setIsAnalyzing(true);
    setError("");
    setResult(null);
+   const requestTimeout = createRequestTimeout();
 
    try {
      const response = await fetch(`${API_BASE_URL}/analyze-resume`, {
        method: "POST",
        headers: { "X-Guest-ID": getGuestId() },
        body: requestBody,
+       signal: requestTimeout.signal,
      });
 
      if (!response.ok) {
@@ -408,13 +427,16 @@ export default function ATSAnalyzer() {
      }
    } catch (cause) {
      setError(
-       cause instanceof TypeError
-         ? "Could not reach the analysis service. Check your connection and try again."
-         : cause instanceof Error && cause.message
-           ? cause.message
-           : "Could not analyze the resume. Please try again.",
+       requestTimeout.didTimeout()
+         ? "Resume analysis is taking too long. Please try again."
+         : cause instanceof TypeError
+           ? "Could not reach the analysis service. Check your connection and try again."
+           : cause instanceof Error && cause.message
+             ? cause.message
+             : "Could not analyze the resume. Please try again.",
      );
    } finally {
+     requestTimeout.cleanup();
      requestInFlight.current = false;
      setIsAnalyzing(false);
    }
