@@ -1,5 +1,5 @@
 import re
-from collections import Counter
+from typing import Literal
 from uuid import UUID
 from fastapi import HTTPException
 
@@ -8,24 +8,22 @@ from backend.services.llm_client import client
 from backend.services.prompts import build_validation_prompt
 
 
-def extract_experience_duration_claims(text: str) -> set[str]:
-    """Find explicit claims about years of professional experience."""
+def extract_experience_duration_claims(text: str) -> set[tuple[int, bool]]:
+    """Extract experience duration claims as (years, exclusive)."""
     pattern = (
         r"\b(?:(?P<qualifier>over|more than|at least)\s+)?"
-        r"(?P<duration>\d+\+?)\s+years?"
+        r"(?P<duration>\d+)\+?\s+years?"
         r"(?:\s+of)?\s+(?:professional\s+)?experience\b"
     )
 
     claims = set()
+
     for match in re.finditer(pattern, text, re.IGNORECASE):
         qualifier = (match.group("qualifier") or "").lower()
-        duration = match.group("duration").lower()
-        if qualifier in {"over", "more than"}:
-            qualifier = "more than"
-        elif duration.endswith("+") and not qualifier:
-            qualifier = "at least"
-        duration = duration.removesuffix("+")
-        claims.add(" ".join(part for part in (qualifier, duration) if part))
+        exclusive = qualifier in {"over", "more than"}
+
+        claims.add((int(match.group("duration")), exclusive))
+
     return claims
 
 
@@ -33,7 +31,7 @@ def validate_resume_facts(
     original_resume: str,
     customized_resume: str,
 ) -> None:
-    """Reject changed email addresses and unsupported numeric claims."""
+    """Reject changed emails, unsupported durations, and changed percentages."""
 
     email_pattern = r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
 
@@ -53,25 +51,41 @@ def validate_resume_facts(
 
     original_duration_claims = extract_experience_duration_claims(original_resume)
     customized_duration_claims = extract_experience_duration_claims(customized_resume)
-    if customized_duration_claims - original_duration_claims:
-        raise ValueError(
-            "Resume validation failed: unsupported experience duration claims detected."
-        )
+    percentage_pattern = r"\b\d+(?:\.\d+)?\s*(?:%|percent\b)"
 
-    percentage_pattern = r"\b\d+(?:\.\d+)?\s*%"
-
-    def extract_percentages(text: str) -> Counter:
-        return Counter(
-            re.sub(r"\s+", "", value) for value in re.findall(percentage_pattern, text)
-        )
+    def extract_percentages(text: str) -> set[str]:
+        return {
+            re.sub(r"\s+", "", value).casefold().replace("percent", "%")
+            for value in re.findall(percentage_pattern, text, re.IGNORECASE)
+        }
 
     original_percentages = extract_percentages(original_resume)
     customized_percentages = extract_percentages(customized_resume)
+
+    if original_percentages - customized_percentages:
+        raise ValueError(
+            "Resume validation failed: original percentage claims were omitted."
+        )
 
     if customized_percentages - original_percentages:
         raise ValueError(
             "Resume validation failed: unsupported percentage claims detected."
         )
+
+    for generated_years, generated_exclusive in customized_duration_claims:
+        supported = any(
+            original_years > generated_years
+            or (
+                original_years == generated_years
+                and (not generated_exclusive or original_exclusive)
+            )
+            for original_years, original_exclusive in original_duration_claims
+        )
+
+        if not supported:
+            raise ValueError(
+                "Resume validation failed: unsupported experience duration claims detected."
+            )
 
 
 def validate_resume_claims(
@@ -139,6 +153,18 @@ def validate_guest_id(guest_id: str) -> str:
             status_code=400,
             detail="A valid guest ID is required.",
         ) from None
+
+
+def validate_resume_file_type(filename: str) -> Literal["pdf", "docx"]:
+    filename = filename.lower()
+    if filename.endswith(".pdf"):
+        return "pdf"
+    if filename.endswith(".docx"):
+        return "docx"
+    raise HTTPException(
+        status_code=400,
+        detail="Only PDF and DOCX files are supported",
+    )
 
 
 def validate_resume_content(text: str) -> None:

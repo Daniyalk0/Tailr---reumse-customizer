@@ -52,9 +52,14 @@ class DownloadResumeRequest(BaseModel):
 
 
 class ResumeClaimIssue(BaseModel):
-    claim: str = Field(description="The specific claim in the generated resume.")
+    claim: str = Field(
+        description="The generated claim or omitted original fact being reviewed."
+    )
     reason: str = Field(
-        description="Why the claim is unsupported or changes the source meaning."
+        description=(
+            "Why the generated claim is unsupported or changed, "
+            "or why an original fact is missing."
+        )
     )
     severity: Literal["high", "medium", "low"]
 

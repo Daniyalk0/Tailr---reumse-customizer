@@ -16,18 +16,30 @@ Rules:
 1. The ORIGINAL RESUME is the only source of evidence about the candidate.
 2. The JOB DESCRIPTION is context for relevance only. It does not prove
    that the candidate possesses a skill, qualification, experience, or achievement.
-3. Flag invented skills, tools, qualifications, responsibilities, projects,
+3. Audit every factual claim in the generated resume against the original,
+   including contact details; education, institution, degree, degree status,
+   and dates; employers, titles, work dates, responsibilities, and history;
+   project names, implementation status, scope, and contributions; skills,
+   tools, certifications, achievements, numbers, and metrics.
+4. Flag invented skills, tools, qualifications, responsibilities, projects,
    achievements, metrics, dates, employers, and experience durations.
-4. Flag claims that materially exaggerate the candidate's original experience
-   or change what they actually did.
-5. Check the entire original resume before deciding a claim is unsupported.
-6. Do not flag reasonable paraphrasing, reordered information, or equivalent
+5. Flag every original factual detail omitted from the generated resume, as
+   well as facts that are changed, contradicted, or materially exaggerated.
+   Do not treat JD-based prioritization as permission to silently drop
+   original facts, even when they are less relevant. For example, changing
+   "2026 – Present" to "Expected 2026" changes the candidate's education
+   status and must be flagged.
+6. Check the entire original resume before deciding a claim is unsupported
+   or omitted. Include material facts even when they are less relevant to the
+   job description.
+7. Do not flag reasonable paraphrasing, reordered information, or equivalent
    terminology when the underlying meaning is supported.
-7. Do not flag a claim merely because it is absent from the job description.
-8. Do not treat a lack of detail as proof of a contradiction. Flag only
-   concrete unsupported or materially changed claims.
-9. Return an empty issues list if no material factual problems are found.
-10. Severity:
+8. Do not flag a claim merely because it is absent from the job description.
+9. Do not treat a lack of detail as proof of a contradiction. Flag only
+   concrete unsupported, omitted, or materially changed facts.
+10. Return an empty issues list only when all original factual details are
+    preserved and all generated factual claims are supported.
+11. Severity:
     - high: fabricated or materially contradictory factual claims
     - medium: significant unsupported details or exaggeration
     - low: minor factual ambiguity that warrants review
@@ -36,8 +48,8 @@ Return only valid JSON matching this structure:
 {{
   "issues": [
     {{
-      "claim": "The specific claim from the generated resume",
-      "reason": "Why the original resume does not support this claim",
+      "claim": "The generated claim or missing original fact being reviewed",
+      "reason": "Why the claim is unsupported or what original fact is missing",
       "severity": "high"
     }}
   ]
@@ -78,7 +90,7 @@ CORE PRINCIPLES:
 1. The TARGET JOB DESCRIPTION determines which qualifications,
    responsibilities, skills, and accomplishments deserve emphasis.
 
-2. The original resume is the sole source of truth for candidate-specific facts. Tailor wording and emphasis to the job description, but never invent or upgrade skills, responsibilities, implementation details, achievements, metrics, certifications, education dates, or experience. Preserve contact details and factual information exactly. Related experience is not proof of direct experience. When evidence is unclear, use narrower wording or omit the claim.
+2. The original resume is the sole source of truth for candidate-specific facts. Tailor wording and emphasis to the job description, but never invent or upgrade skills, responsibilities, implementation details, achievements, metrics, certifications, education dates, or experience. Preserve every original factual detail, including contact details, institutions, degree status, dates, work history, projects, skills, certifications, and numbers. Preserve the meaning of dates and statuses exactly; never change "2026 – Present" to "Expected 2026". Related experience is not proof of direct experience. When evidence is unclear, use narrower wording or omit only the unsupported claim, not a supported original fact.
 
 3. Never assume a particular profession, industry, seniority level,
    or technical discipline. Determine the target role dynamically
@@ -106,7 +118,7 @@ JOB-MATCHING ANALYSIS:
 
 RESUME CUSTOMIZATION:
 
-8. Return the COMPLETE customized resume. Preserve contact information, meaningful original sections, relevant projects or experience, education, qualifications, dates, and other useful details.
+8. Return the COMPLETE customized resume. Preserve all original facts and meaningful content, including contact information, every education entry and degree status, institutions and dates, work history, projects, skills, certifications, numbers, and qualifications. You may improve wording and reorder content for relevance, but do not silently omit a fact or change its meaning or status.
 
 Preserve the original section names and their semantic classifications. Do not rename, merge, split, or reclassify sections in ways that change their meaning or misrepresent the candidate's background. For example, keep projects under Projects and employment under Professional Experience or Work Experience. Never reclassify a personal or academic project as professional experience simply because its work is relevant to the target job.
 
@@ -250,7 +262,13 @@ Rules:
 - The original resume is the only evidence about the candidate.
 - The job description is context, not evidence.
 - Remove or revise unsupported claims. Do not invent replacements.
-- Preserve supported facts and relevant content.
+- Preserve every supported original fact and meaningful content, even when
+  it is less relevant to the job description. Correcting a claim is not
+  permission to delete unrelated supported facts or whole sections.
+- Preserve contact details, education and degree status, institutions,
+  dates, work history, projects, skills, certifications, and numbers.
+- Preserve date and status meaning exactly; for example, do not change
+  "2026 – Present" to "Expected 2026".
 - Return only valid JSON matching the required resume response schema.
 
 ORIGINAL RESUME:

@@ -23,6 +23,29 @@ from backend.services.error_handling import (
 logger = logging.getLogger(__name__)
 
 
+def _validate_resume_facts_or_raise(
+    original_resume: str,
+    customized_resume: str,
+) -> None:
+    try:
+        validate_resume_facts(
+            original_resume=original_resume,
+            customized_resume=customized_resume,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "Deterministic resume fact validation failed: %s",
+            exc,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "We couldn't safely finalize your resume. "
+                "Please try again or review your original resume."
+            ),
+        ) from None
+
+
 def customize_resume(
     resume_text: str,
     job_description: str,
@@ -98,7 +121,7 @@ def customize_resume(
 
         result = CustomizeResumeResponse.model_validate_json(generated_text)
 
-        validate_resume_facts(
+        _validate_resume_facts_or_raise(
             original_resume=resume_text,
             customized_resume=result.customized_resume,
         )
@@ -114,21 +137,17 @@ def customize_resume(
             dict(Counter(issue.severity for issue in validation.issues)),
         )
 
-        serious_issues = [
-            issue for issue in validation.issues if issue.severity in {"high", "medium"}
-        ]
-
-        if serious_issues:
+        if validation.issues:
             logger.warning(
-                "Resume validation found %d potentially unsupported claims",
-                len(serious_issues),
+                "Resume validation found %d factual issue(s)",
+                len(validation.issues),
             )
 
             correction_prompt = build_correction_prompt(
                 original_resume=resume_text,
                 job_description=job_description,
                 generated_resume_json=result.model_dump_json(),
-                validation_issues=[issue.model_dump() for issue in serious_issues],
+                validation_issues=[issue.model_dump() for issue in validation.issues],
             )
 
             correction_response = client.chat.completions.create(
@@ -146,7 +165,7 @@ def customize_resume(
 
             result = CustomizeResumeResponse.model_validate_json(corrected_text)
 
-            validate_resume_facts(
+            _validate_resume_facts_or_raise(
                 original_resume=resume_text,
                 customized_resume=result.customized_resume,
             )
@@ -157,11 +176,7 @@ def customize_resume(
                 generated_resume=result.customized_resume,
             )
 
-            unresolved_high_issues = [
-                issue for issue in final_validation.issues if issue.severity == "high"
-            ]
-
-            if unresolved_high_issues:
+            if final_validation.issues:
                 raise HTTPException(
                     status_code=422,
                     detail=(
@@ -169,7 +184,6 @@ def customize_resume(
                         "Please try again or review your original resume."
                     ),
                 )
-
 
         result.suggested_keywords = filter_existing_keywords(
             customized_resume=result.customized_resume,

@@ -5,6 +5,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { ErrorToast } from "@/components/ErrorToast";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { getErrorMessage } from "@/lib/error-message";
+import { validatePdfPageLimit } from "@/lib/validate-pdf";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
@@ -59,7 +60,9 @@ type ATSQuota = {
 };
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isAnalysisResponse(value: unknown): value is ATSAnalysisResponse {
@@ -106,18 +109,18 @@ function ScoreSummary({
           {label}
         </p>
         <p className="m-0 shrink-0 text-[22px] font-semibold leading-none tracking-[-0.05em] text-[#28583e]">
-        {score === null ? (
-          <span className="text-sm font-medium tracking-normal text-[#738075]">
-            N/A
-          </span>
-        ) : (
-          <>
-            {score}
-            <span className="ml-0.5 text-[11px] font-medium tracking-normal text-[#829084]">
-              /100
+          {score === null ? (
+            <span className="text-sm font-medium tracking-normal text-[#738075]">
+              N/A
             </span>
-          </>
-        )}
+          ) : (
+            <>
+              {score}
+              <span className="ml-0.5 text-[11px] font-medium tracking-normal text-[#829084]">
+                /100
+              </span>
+            </>
+          )}
         </p>
       </div>
       {score !== null && (
@@ -218,7 +221,11 @@ function TextList({
   emptyMessage: string;
 }) {
   if (items.length === 0) {
-    return <p className="m-0 text-xs leading-relaxed text-[#78847b]">{emptyMessage}</p>;
+    return (
+      <p className="m-0 text-xs leading-relaxed text-[#78847b]">
+        {emptyMessage}
+      </p>
+    );
   }
 
   return (
@@ -248,9 +255,9 @@ export default function ATSAnalyzer() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState("");
   const [atsQuota, setAtsQuota] = useState<ATSQuota | null>(null);
-  const [quotaState, setQuotaState] = useState<
-    "loading" | "loaded" | "error"
-  >("loading");
+  const [quotaState, setQuotaState] = useState<"loading" | "loaded" | "error">(
+    "loading",
+  );
   const requestInFlight = useRef(false);
 
   const refreshATSQuota = useCallback(async () => {
@@ -298,11 +305,12 @@ export default function ATSAnalyzer() {
 
     return () => window.clearTimeout(timer);
   }, [refreshATSQuota]);
-   useEffect(() => {
-     console.log("ATS quota updated:", atsQuota);
-   }, [atsQuota]);
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  useEffect(() => {
+    console.log("ATS quota updated:", atsQuota);
+  }, [atsQuota]);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const selectedFile = event.target.files?.[0] ?? null;
     event.target.value = "";
     setError("");
@@ -327,6 +335,16 @@ export default function ATSAnalyzer() {
       setError("The selected file exceeds the 10 MB limit.");
       return;
     }
+    try {
+      await validatePdfPageLimit(selectedFile);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not validate the PDF. Please try another file.",
+      );
+      return;
+    }
 
     setFile(selectedFile);
   }
@@ -343,104 +361,104 @@ export default function ATSAnalyzer() {
     setResult(null);
   }
 
- async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-   event.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-   if (requestInFlight.current) return;
+    if (requestInFlight.current) return;
 
-   if (inputMode === "upload" && !file) {
-     setError("Choose a PDF or DOCX resume to analyze.");
-     return;
-   }
+    if (inputMode === "upload" && !file) {
+      setError("Choose a PDF or DOCX resume to analyze.");
+      return;
+    }
 
-   if (inputMode === "paste" && !resumeText.trim()) {
-     setError("Paste your resume text before analyzing.");
-     return;
-   }
+    if (inputMode === "paste" && !resumeText.trim()) {
+      setError("Paste your resume text before analyzing.");
+      return;
+    }
 
-   if (inputMode === "paste" && resumeText.length > MAX_RESUME_TEXT_LENGTH) {
-     setError("Resume text must be 50,000 characters or fewer.");
-     return;
-   }
+    if (inputMode === "paste" && resumeText.length > MAX_RESUME_TEXT_LENGTH) {
+      setError("Resume text must be 50,000 characters or fewer.");
+      return;
+    }
 
-   if (jobDescription.length > MAX_JOB_DESCRIPTION_LENGTH) {
-     setError("The job description must be 20,000 characters or fewer.");
-     return;
-   }
+    if (jobDescription.length > MAX_JOB_DESCRIPTION_LENGTH) {
+      setError("The job description must be 20,000 characters or fewer.");
+      return;
+    }
 
-   const requestBody = new FormData();
+    const requestBody = new FormData();
 
-   if (inputMode === "upload" && file) {
-     requestBody.append("file", file);
-   } else {
-     requestBody.append("resume_text", resumeText.trim());
-   }
+    if (inputMode === "upload" && file) {
+      requestBody.append("file", file);
+    } else {
+      requestBody.append("resume_text", resumeText.trim());
+    }
 
-   if (jobDescription.trim()) {
-     requestBody.append("job_description", jobDescription.trim());
-   }
+    if (jobDescription.trim()) {
+      requestBody.append("job_description", jobDescription.trim());
+    }
 
-   requestInFlight.current = true;
-   setIsAnalyzing(true);
-   setError("");
-   setResult(null);
-   const requestTimeout = createRequestTimeout();
+    requestInFlight.current = true;
+    setIsAnalyzing(true);
+    setError("");
+    setResult(null);
+    const requestTimeout = createRequestTimeout();
 
-   try {
-     const response = await fetch(`${API_BASE_URL}/analyze-resume`, {
-       method: "POST",
-       headers: { "X-Guest-ID": getGuestId() },
-       body: requestBody,
-       signal: requestTimeout.signal,
-     });
+    try {
+      const response = await fetch(`${API_BASE_URL}/analyze-resume`, {
+        method: "POST",
+        headers: { "X-Guest-ID": getGuestId() },
+        body: requestBody,
+        signal: requestTimeout.signal,
+      });
 
-     if (!response.ok) {
-       const responseBody: unknown = await response
-         .clone()
-         .json()
-         .catch(() => null);
-       if (
-         typeof responseBody === "object" &&
-         responseBody !== null &&
-         "detail" in responseBody &&
-         typeof responseBody.detail === "object" &&
-         responseBody.detail !== null &&
-         "code" in responseBody.detail &&
-         responseBody.detail.code === "ATS_DAILY_QUOTA_EXCEEDED"
-       ) {
-         void refreshATSQuota();
-       }
-       throw new Error(await getErrorMessage(response));
-     }
+      if (!response.ok) {
+        const responseBody: unknown = await response
+          .clone()
+          .json()
+          .catch(() => null);
+        if (
+          typeof responseBody === "object" &&
+          responseBody !== null &&
+          "detail" in responseBody &&
+          typeof responseBody.detail === "object" &&
+          responseBody.detail !== null &&
+          "code" in responseBody.detail &&
+          responseBody.detail.code === "ATS_DAILY_QUOTA_EXCEEDED"
+        ) {
+          void refreshATSQuota();
+        }
+        throw new Error(await getErrorMessage(response));
+      }
 
-     const responseData: unknown = await response.json();
+      const responseData: unknown = await response.json();
 
-     if (!isAnalysisResponse(responseData)) {
-       throw new Error(
-         "The backend returned an invalid ATS analysis response.",
-       );
-     }
+      if (!isAnalysisResponse(responseData)) {
+        throw new Error(
+          "The backend returned an invalid ATS analysis response.",
+        );
+      }
 
-     setResult(responseData);
-     if (jobDescription.trim()) {
-       await refreshATSQuota();
-     }
-   } catch (cause) {
-     setError(
-       requestTimeout.didTimeout()
-         ? "Resume analysis is taking too long. Please try again."
-         : cause instanceof TypeError
-           ? "Could not reach the analysis service. Check your connection and try again."
-           : cause instanceof Error && cause.message
-             ? cause.message
-             : "Could not analyze the resume. Please try again.",
-     );
-   } finally {
-     requestTimeout.cleanup();
-     requestInFlight.current = false;
-     setIsAnalyzing(false);
-   }
- }
+      setResult(responseData);
+      if (jobDescription.trim()) {
+        await refreshATSQuota();
+      }
+    } catch (cause) {
+      setError(
+        requestTimeout.didTimeout()
+          ? "Resume analysis is taking too long. Please try again."
+          : cause instanceof TypeError
+            ? "Could not reach the analysis service. Check your connection and try again."
+            : cause instanceof Error && cause.message
+              ? cause.message
+              : "Could not analyze the resume. Please try again.",
+      );
+    } finally {
+      requestTimeout.cleanup();
+      requestInFlight.current = false;
+      setIsAnalyzing(false);
+    }
+  }
 
   function switchInputMode(mode: "upload" | "paste") {
     setInputMode(mode);
@@ -486,8 +504,8 @@ export default function ATSAnalyzer() {
                       {atsQuota.ats_remaining} of {atsQuota.ats_daily_limit}
                     </strong>{" "}
                     job-match analysis
-                    {atsQuota.ats_daily_limit === 1 ? "" : "es"}{" "}
-                    remaining today.
+                    {atsQuota.ats_daily_limit === 1 ? "" : "es"} remaining
+                    today.
                   </>
                 ) : (
                   <>
@@ -509,15 +527,10 @@ export default function ATSAnalyzer() {
           )}
         </header>
 
-        {error && (
-          <ErrorToast message={error} onDismiss={() => setError("")} />
-        )}
+        {error && <ErrorToast message={error} onDismiss={() => setError("")} />}
         {isAnalyzing && (
           <div className="mb-4">
-            <FeedbackMessage
-              kind="loading"
-              message="Analyzing your resume…"
-            />
+            <FeedbackMessage kind="loading" message="Analyzing your resume…" />
           </div>
         )}
 
@@ -577,7 +590,9 @@ export default function ATSAnalyzer() {
               <div
                 id="resume-input-panel"
                 role="tabpanel"
-                aria-labelledby={inputMode === "upload" ? "upload-tab" : "paste-tab"}
+                aria-labelledby={
+                  inputMode === "upload" ? "upload-tab" : "paste-tab"
+                }
                 className="mt-4"
               >
                 {inputMode === "upload" ? (
@@ -589,7 +604,10 @@ export default function ATSAnalyzer() {
                         : "border-[#c9d7cb] bg-[#fafcf9] hover:border-[#79a083] hover:bg-[#f5faf5]"
                     }`}
                   >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-[#e8eee8] bg-white text-[#4c8059]" aria-hidden="true">
+                    <span
+                      className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-[#e8eee8] bg-white text-[#4c8059]"
+                      aria-hidden="true"
+                    >
                       <svg className="size-5" viewBox="0 0 24 24" fill="none">
                         <path
                           d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15.5v3.75c0 .41.34.75.75.75h12.5a.75.75 0 0 0 .75-.75V15.5"
@@ -678,7 +696,12 @@ export default function ATSAnalyzer() {
                 {jobDescription.trim()
                   ? "Check job match"
                   : "Analyze my resume"}
-                <svg className="size-[17px]" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <svg
+                  className="size-[17px]"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden="true"
+                >
                   <path
                     d="M4 10h12m-5-5 5 5-5 5"
                     stroke="currentColor"
@@ -727,7 +750,10 @@ export default function ATSAnalyzer() {
                 </div>
 
                 <div className="divide-y divide-[#edf0ed]">
-                  <section className="p-4 sm:p-5" aria-labelledby="formatting-title">
+                  <section
+                    className="p-4 sm:p-5"
+                    aria-labelledby="formatting-title"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3
                         id="formatting-title"
@@ -766,7 +792,10 @@ export default function ATSAnalyzer() {
                     )}
                   </section>
 
-                  <section className="p-4 sm:p-5" aria-labelledby="missing-keywords-title">
+                  <section
+                    className="p-4 sm:p-5"
+                    aria-labelledby="missing-keywords-title"
+                  >
                     <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                       <h3
                         id="missing-keywords-title"
@@ -800,7 +829,10 @@ export default function ATSAnalyzer() {
                     />
                   </section>
 
-                  <section className="p-4 sm:p-5" aria-labelledby="recommendations-title">
+                  <section
+                    className="p-4 sm:p-5"
+                    aria-labelledby="recommendations-title"
+                  >
                     <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                       <h3
                         id="recommendations-title"
@@ -879,7 +911,10 @@ export default function ATSAnalyzer() {
               </div>
             ) : (
               <div className="rounded-[15px] border border-dashed border-[#d6e0d6] bg-white/70 px-6 py-12 text-center sm:py-16">
-                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#edf4ee] text-[#477051]" aria-hidden="true">
+                <span
+                  className="mx-auto grid size-12 place-items-center rounded-2xl bg-[#edf4ee] text-[#477051]"
+                  aria-hidden="true"
+                >
                   <svg className="size-6" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M5 19V5m0 14h14M8 15l3-4 3 2 4-6"

@@ -1,4 +1,4 @@
-export const MAX_PDF_PAGES = 50;
+export const MAX_PDF_PAGES = 5;
 
 export async function validatePdfPageLimit(file: File): Promise<void> {
   if (!file.name.toLowerCase().endsWith(".pdf")) return;

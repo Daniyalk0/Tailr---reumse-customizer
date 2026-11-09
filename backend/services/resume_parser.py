@@ -1,4 +1,5 @@
 from io import BytesIO
+from typing import Literal
 
 from docx import Document
 from fastapi import HTTPException
@@ -66,22 +67,14 @@ def validate_docx_archive(content: bytes) -> None:
         ) from exc
 
 
-def extract_resume_text(filename: str, content: bytes) -> str:
-    filename = filename.lower()
-
-    if not filename.endswith((".pdf", ".docx")):
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF and DOCX files are supported",
-        )
-
+def extract_resume_text(file_type: Literal["pdf", "docx"], content: bytes) -> str:
     if not content:
         raise HTTPException(
             status_code=400,
             detail="The uploaded resume is empty",
         )
 
-    if filename.endswith(".pdf"):
+    if file_type == "pdf":
         if b"%PDF-" not in content[:1024]:
             raise HTTPException(
                 status_code=400,
@@ -94,7 +87,7 @@ def extract_resume_text(filename: str, content: bytes) -> str:
         )
 
     try:
-        if filename.endswith(".pdf"):
+        if file_type == "pdf":
             reader = PdfReader(BytesIO(content))
 
             if reader.is_encrypted:

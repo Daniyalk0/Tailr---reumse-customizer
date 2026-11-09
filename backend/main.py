@@ -10,9 +10,8 @@ from backend.services.quota_service import (
     finalize_guest_generation,
     finalize_guest_ats_analysis,
     reserve_guest_ats_analysis,
-    ATS_DAILY_LIMIT
 )
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from backend.schemas import (
     CustomizeResumeRequest,
@@ -35,10 +34,12 @@ from slowapi.util import get_remote_address
 
 from backend.schemas import ATSAnalysisRequest, ATSAnalysisResponse
 from backend.services.ats_analyzer import analyze_resume
-from fastapi import File, Form, UploadFile
 
-from backend.services.resume_validation import validate_guest_id
-from backend.services.resume_validation import validate_resume_content
+from backend.services.resume_validation import (
+    validate_guest_id,
+    validate_resume_content,
+    validate_resume_file_type,
+)
 
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
@@ -75,11 +76,7 @@ def home():
 @limiter.limit("10/minute")
 async def upload_resume(request:Request, file: UploadFile = File(...)):
     filename = file.filename or ""
-    if not filename.lower().endswith((".pdf", ".docx")):
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF and DOCX files are supported",
-        )
+    file_type = validate_resume_file_type(filename)
 
     content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
@@ -89,7 +86,7 @@ async def upload_resume(request:Request, file: UploadFile = File(...)):
         )
 
     text = extract_resume_text(
-        filename=filename,
+        file_type=file_type,
         content=content,
     )
 
@@ -199,12 +196,7 @@ async def analyze_resume_endpoint(
 
     if file is not None:
         filename = file.filename or ""
-
-        if not filename.lower().endswith((".pdf", ".docx")):
-            raise HTTPException(
-                status_code=400,
-                detail="Only PDF and DOCX files are supported.",
-            )
+        file_type = validate_resume_file_type(filename)
 
         content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
 
@@ -214,7 +206,7 @@ async def analyze_resume_endpoint(
                 detail="The uploaded file exceeds the 10 MB limit.",
             )
 
-        resume_text = extract_resume_text(filename, content)
+        resume_text = extract_resume_text(file_type, content)
 
     try:
         request_data = ATSAnalysisRequest(
@@ -227,34 +219,15 @@ async def analyze_resume_endpoint(
             detail=exc.errors(include_input=False),
         ) from exc
 
-    if len(request_data.resume_text) > MAX_RESUME_TEXT_LENGTH:
-        raise HTTPException(
-            status_code=413,
-            detail="Resume text exceeds the maximum character limit.",
-        )
-
-    validate_resume_content(request_data.resume_text)
+    if file is None:
+        validate_resume_content(request_data.resume_text)
     guest_id = validate_guest_id(guest_id)
 
     requires_ats_quota = bool(
         request_data.job_description and request_data.job_description.strip()
     )
 
-    # Formatting-only analysis is free.
-    if not requires_ats_quota:
-        try:
-            return analyze_resume(
-                resume_text=request_data.resume_text,
-                job_description=None,
-            )
-        except RuntimeError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=("ATS analysis is temporarily unavailable. Please try again."),
-            ) from exc
-
-    # Reserve one ATS use before running job matching.
-    usage_date = reserve_guest_ats_analysis(guest_id)
+    usage_date = reserve_guest_ats_analysis(guest_id) if requires_ats_quota else None
     succeeded = False
 
     try:
@@ -272,20 +245,21 @@ async def analyze_resume_endpoint(
         ) from exc
 
     finally:
-        try:
-            finalize_guest_ats_analysis(
-                guest_id,
-                usage_date,
-                succeeded=succeeded,
-            )
-        except Exception:
-            logger.exception(
-                "Failed to finalize ATS quota reservation "
-                "(guest_id=%s, usage_date=%s, succeeded=%s)",
-                guest_id,
-                usage_date,
-                succeeded,
-            )
+        if usage_date is not None:
+            try:
+                finalize_guest_ats_analysis(
+                    guest_id,
+                    usage_date,
+                    succeeded=succeeded,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to finalize ATS quota reservation "
+                    "(guest_id=%s, usage_date=%s, succeeded=%s)",
+                    guest_id,
+                    usage_date,
+                    succeeded,
+                )
 
 
 @app.post("/download-resume/docx")

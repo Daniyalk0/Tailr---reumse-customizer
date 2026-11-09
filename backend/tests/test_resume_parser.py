@@ -7,6 +7,7 @@ from pypdf import PdfWriter
 
 from backend.schemas import MAX_RESUME_TEXT_LENGTH
 from backend.services.resume_parser import extract_resume_text
+from backend.services.resume_validation import validate_resume_file_type
 
 
 def create_docx(text: str = "Resume content") -> bytes:
@@ -28,14 +29,15 @@ def create_pdf(text: str = "Resume content") -> bytes:
 
 def test_rejects_unsupported_extension():
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.txt", b"some content")
+        validate_resume_file_type("resume.txt")
 
     assert exc.value.status_code == 400
+    assert exc.value.detail == "Only PDF and DOCX files are supported"
 
 
 def test_rejects_empty_file():
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.pdf", b"")
+        extract_resume_text("pdf", b"")
 
     assert exc.value.status_code == 400
     assert "empty" in exc.value.detail.lower()
@@ -43,7 +45,7 @@ def test_rejects_empty_file():
 
 def test_rejects_invalid_pdf_signature():
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.pdf", b"This is not a PDF")
+        extract_resume_text("pdf", b"This is not a PDF")
 
     assert exc.value.status_code == 400
     assert "valid PDF" in exc.value.detail
@@ -51,7 +53,7 @@ def test_rejects_invalid_pdf_signature():
 
 def test_rejects_invalid_docx_signature():
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.docx", b"This is not a DOCX")
+        extract_resume_text("docx", b"This is not a DOCX")
 
     assert exc.value.status_code == 400
     assert "valid DOCX" in exc.value.detail
@@ -66,7 +68,7 @@ def test_rejects_password_protected_pdf():
     writer.write(buffer)
 
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.pdf", buffer.getvalue())
+        extract_resume_text("pdf", buffer.getvalue())
 
     assert exc.value.status_code == 400
     assert "Password-protected" in exc.value.detail
@@ -80,7 +82,7 @@ def test_rejects_pdf_with_no_extractable_text():
     writer.write(buffer)
 
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.pdf", buffer.getvalue())
+        extract_resume_text("pdf", buffer.getvalue())
 
     assert exc.value.status_code == 400
     assert "No readable text" in exc.value.detail
@@ -96,7 +98,7 @@ def test_rejects_extracted_text_over_limit(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.docx", content)
+        extract_resume_text("docx", content)
 
     assert exc.value.status_code == 413
 
@@ -108,7 +110,7 @@ def test_extracts_valid_docx():
         "Skills: Python, React, SQL and web development"
     )
 
-    result = extract_resume_text("resume.docx", content)
+    result = extract_resume_text("docx", content)
 
     assert "Daniyal Khan" in result
     assert "Software Developer" in result
@@ -126,7 +128,7 @@ def test_extracts_valid_pdf():
     )
     pdf.save()
 
-    result = extract_resume_text("resume.pdf", buffer.getvalue())
+    result = extract_resume_text("pdf", buffer.getvalue())
 
     assert "Daniyal Khan" in result
     assert "Software Developer" in result
@@ -139,7 +141,7 @@ def test_rejects_unrelated_document():
     )
 
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("document.docx", content)
+        extract_resume_text("docx", content)
 
     assert exc.value.status_code == 400
     assert "doesn't appear to be a resume" in exc.value.detail
@@ -153,7 +155,7 @@ def test_accepts_fresher_resume_without_professional_experience():
         "Projects: Resume Customizer and Ecommerce Application"
     )
 
-    result = extract_resume_text("resume.docx", content)
+    result = extract_resume_text("docx", content)
 
     assert "Education" in result
     assert "Projects" in result
@@ -166,7 +168,7 @@ def test_accepts_resume_with_contact_information():
         "Built applications and learned modern software development tools."
     )
 
-    result = extract_resume_text("resume.docx", content)
+    result = extract_resume_text("docx", content)
 
     assert "daniyal@example.com" in result
 
@@ -193,7 +195,7 @@ def test_rejects_pdf_over_page_limit():
     writer.write(buffer)
 
     with pytest.raises(HTTPException) as exc:
-        extract_resume_text("resume.pdf", buffer.getvalue())
+        extract_resume_text("pdf", buffer.getvalue())
 
     assert exc.value.status_code == 413
     assert "pages" in exc.value.detail.lower()
