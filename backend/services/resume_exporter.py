@@ -162,7 +162,7 @@ def generate_docx(resume_text: str) -> bytes:
     lines = resume_text.splitlines()
     designation_index = _get_designation_index(lines)
 
-    for line_index, line, index in enumerate(resume_text.splitlines()):
+    for line_index, line in enumerate(resume_text.splitlines()):
         paragraph = document.add_paragraph()
 
         if not line.strip():
@@ -179,7 +179,7 @@ def generate_docx(resume_text: str) -> bytes:
             run.font.color.rgb = RGBColor(37, 77, 59)
             paragraph.paragraph_format.space_after = Pt(3)
 
-        elif index == designation_index:
+        elif line_index == designation_index:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         elif line_index in contact_indices:
@@ -276,7 +276,7 @@ def generate_pdf(resume_text: str) -> bytes:
     name_index, contact_indices = _get_header_line_indices(resume_text)
     lines = resume_text.splitlines()
     designation_index = _get_designation_index(lines)
-    for line_index, line, index in enumerate(resume_text.splitlines()):
+    for line_index, line in enumerate(resume_text.splitlines()):
         if not line.strip():
             story.append(Spacer(1, 8))
             continue
@@ -284,8 +284,8 @@ def generate_pdf(resume_text: str) -> bytes:
         if line_index == name_index:
             style = name_style
 
-        elif index == designation_index:
-            style = designation_style   
+        elif line_index == designation_index:
+            style = designation_style
 
         elif line_index in contact_indices:
             style = contact_style
