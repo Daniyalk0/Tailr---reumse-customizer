@@ -12,6 +12,12 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from xml.sax.saxutils import escape
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from reportlab.lib.enums import TA_CENTER
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, HRFlowable
+
 
 SECTION_HEADINGS = {
     "SUMMARY",
@@ -38,7 +44,7 @@ SECTION_HEADINGS = {
 }
 
 FONT_NAME = "Arial"
-BODY_FONT_SIZE = 10
+BODY_FONT_SIZE = 9.5
 HEADING_FONT_SIZE = 11
 NAME_FONT_SIZE = 20
 CONTACT_FONT_SIZE = 9
@@ -53,6 +59,45 @@ def _section_heading(line: str) -> bool:
 def _is_bullet(line: str) -> bool:
     stripped = line.lstrip()
     return stripped.startswith(("• ", "- ", "* ", "‣ ", "▪ ", "– "))
+
+
+def _add_bottom_border(paragraph):
+    p_pr = paragraph._p.get_or_add_pPr()
+    borders = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "4")
+    bottom.set(qn("w:space"), "4")
+    bottom.set(qn("w:color"), "C8D0CB")
+
+    borders.append(bottom)
+    p_pr.append(borders)
+
+
+def _get_header_line_indices(resume_text: str):
+    lines = resume_text.splitlines()
+
+    name_index = next(
+        (i for i, line in enumerate(lines) if line.strip()),
+        None,
+    )
+
+    if name_index is None:
+        return None, set()
+
+    contact_indices = set()
+
+    for i in range(name_index + 1, len(lines)):
+        if not lines[i].strip():
+            continue
+
+        if _is_contact_line(lines[i]):
+            contact_indices.add(i)
+        else:
+            break
+
+    return name_index, contact_indices
 
 
 def _is_contact_line(line: str) -> bool:
@@ -79,22 +124,32 @@ def _register_pdf_fonts() -> None:
     font_directory = Path(reportlab_package_file).parent / "fonts"
 
     if PDF_FONT_NAME not in registered_fonts:
-        pdfmetrics.registerFont(
-            TTFont(PDF_FONT_NAME, str(font_directory / "Vera.ttf"))
-        )
+        pdfmetrics.registerFont(TTFont(PDF_FONT_NAME, str(font_directory / "Vera.ttf")))
     if PDF_BOLD_FONT_NAME not in registered_fonts:
         pdfmetrics.registerFont(
             TTFont(PDF_BOLD_FONT_NAME, str(font_directory / "VeraBd.ttf"))
         )
 
 
+def _get_designation_index(lines):
+    non_empty = [i for i, line in enumerate(lines) if line.strip()]
+
+    for i in non_empty[1:]:
+        if _section_heading(lines[i]):
+            break
+        if not _is_contact_line(lines[i]):
+            return i
+
+    return None
+
+
 def generate_docx(resume_text: str) -> bytes:
     document = Document()
     section = document.sections[0]
-    section.top_margin = Inches(0.65)
-    section.bottom_margin = Inches(0.65)
-    section.left_margin = Inches(0.75)
-    section.right_margin = Inches(0.75)
+    section.top_margin = Inches(0.35)
+    section.bottom_margin = Inches(0.35)
+    section.left_margin = Inches(0.5)
+    section.right_margin = Inches(0.5)
 
     normal = document.styles["Normal"]
     normal.font.name = FONT_NAME
@@ -103,8 +158,11 @@ def generate_docx(resume_text: str) -> bytes:
     normal.paragraph_format.space_after = Pt(3)
     normal.paragraph_format.line_spacing = 1.08
 
-    first_content_line = True
-    for line in resume_text.splitlines():
+    name_index, contact_indices = _get_header_line_indices(resume_text)
+    lines = resume_text.splitlines()
+    designation_index = _get_designation_index(lines)
+
+    for line_index, line, index in enumerate(resume_text.splitlines()):
         paragraph = document.add_paragraph()
 
         if not line.strip():
@@ -114,16 +172,22 @@ def generate_docx(resume_text: str) -> bytes:
         run = paragraph.add_run(line)
         run.font.name = FONT_NAME
 
-        if first_content_line:
+        if line_index == name_index:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run.bold = True
             run.font.size = Pt(NAME_FONT_SIZE)
             run.font.color.rgb = RGBColor(37, 77, 59)
-            paragraph.paragraph_format.space_after = Pt(2)
-            first_content_line = False
-        elif _is_contact_line(line):
+            paragraph.paragraph_format.space_after = Pt(3)
+
+        elif index == designation_index:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        elif line_index in contact_indices:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run.font.size = Pt(CONTACT_FONT_SIZE)
             run.font.color.rgb = RGBColor(90, 99, 93)
-            paragraph.paragraph_format.space_after = Pt(8)
+            paragraph.paragraph_format.space_after = Pt(2)
+
         elif _section_heading(line):
             run.bold = True
             run.font.size = Pt(HEADING_FONT_SIZE)
@@ -131,6 +195,7 @@ def generate_docx(resume_text: str) -> bytes:
             paragraph.paragraph_format.keep_with_next = True
             paragraph.paragraph_format.space_before = Pt(9)
             paragraph.paragraph_format.space_after = Pt(3)
+            _add_bottom_border(paragraph)
         elif _is_bullet(line):
             paragraph.paragraph_format.left_indent = Inches(0.2)
             paragraph.paragraph_format.first_line_indent = Inches(-0.15)
@@ -147,10 +212,10 @@ def generate_pdf(resume_text: str) -> bytes:
     document = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=0.7 * inch,
-        leftMargin=0.7 * inch,
-        topMargin=0.65 * inch,
-        bottomMargin=0.65 * inch,
+        rightMargin=0.5 * inch,
+        leftMargin=0.5 * inch,
+        topMargin=0.35 * inch,
+        bottomMargin=0.35 * inch,
     )
 
     styles = getSampleStyleSheet()
@@ -170,7 +235,14 @@ def generate_pdf(resume_text: str) -> bytes:
         fontSize=NAME_FONT_SIZE,
         leading=24,
         textColor=colors.HexColor("#254d3b"),
-        spaceAfter=2,
+        spaceAfter=3,
+        alignment=TA_CENTER,
+    )
+
+    designation_style = ParagraphStyle(
+        "ResumeDesignation",
+        parent=body_style,
+        alignment=TA_CENTER,
     )
     contact_style = ParagraphStyle(
         "ResumeContact",
@@ -178,7 +250,8 @@ def generate_pdf(resume_text: str) -> bytes:
         fontSize=CONTACT_FONT_SIZE,
         leading=11,
         textColor=colors.HexColor("#5a635d"),
-        spaceAfter=8,
+        spaceAfter=2,
+        alignment=TA_CENTER,
     )
     heading_style = ParagraphStyle(
         "ResumeSectionHeading",
@@ -198,26 +271,41 @@ def generate_pdf(resume_text: str) -> bytes:
         firstLineIndent=-8,
         spaceAfter=2,
     )
-    story = []
-    first_content_line = True
 
-    for line in resume_text.splitlines():
+    story = []
+    name_index, contact_indices = _get_header_line_indices(resume_text)
+    lines = resume_text.splitlines()
+    designation_index = _get_designation_index(lines)
+    for line_index, line, index in enumerate(resume_text.splitlines()):
         if not line.strip():
             story.append(Spacer(1, 8))
             continue
 
-        if first_content_line:
+        if line_index == name_index:
             style = name_style
-            first_content_line = False
-        elif _is_contact_line(line):
+
+        elif index == designation_index:
+            style = designation_style   
+
+        elif line_index in contact_indices:
             style = contact_style
+
         elif _section_heading(line):
             style = heading_style
         elif _is_bullet(line):
             style = bullet_style
         else:
             style = body_style
-
+        if _section_heading(line):
+            story.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=0.5,
+                    color=colors.HexColor("#C8D0CB"),
+                    spaceBefore=0,
+                    spaceAfter=6,
+                )
+            )
         story.append(Paragraph(escape(line), style))
 
     document.build(story)

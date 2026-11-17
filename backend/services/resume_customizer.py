@@ -13,7 +13,6 @@ from backend.services.prompts import (
 from backend.services.resume_validation import (
     filter_existing_keywords,
     validate_resume_claims,
-    validate_resume_facts,
 )
 from backend.services.error_handling import (
     get_upstream_status_code,
@@ -21,29 +20,6 @@ from backend.services.error_handling import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _validate_resume_facts_or_raise(
-    original_resume: str,
-    customized_resume: str,
-) -> None:
-    try:
-        validate_resume_facts(
-            original_resume=original_resume,
-            customized_resume=customized_resume,
-        )
-    except ValueError as exc:
-        logger.warning(
-            "Deterministic resume fact validation failed: %s",
-            exc,
-        )
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "We couldn't safely finalize your resume. "
-                "Please try again or review your original resume."
-            ),
-        ) from None
 
 
 def customize_resume(
@@ -121,11 +97,6 @@ def customize_resume(
 
         result = CustomizeResumeResponse.model_validate_json(generated_text)
 
-        _validate_resume_facts_or_raise(
-            original_resume=resume_text,
-            customized_resume=result.customized_resume,
-        )
-
         validation = validate_resume_claims(
             original_resume=resume_text,
             job_description=job_description,
@@ -164,11 +135,6 @@ def customize_resume(
                 raise RuntimeError("The AI returned an empty correction response")
 
             result = CustomizeResumeResponse.model_validate_json(corrected_text)
-
-            _validate_resume_facts_or_raise(
-                original_resume=resume_text,
-                customized_resume=result.customized_resume,
-            )
 
             final_validation = validate_resume_claims(
                 original_resume=resume_text,

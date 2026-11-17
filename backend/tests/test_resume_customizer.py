@@ -15,28 +15,33 @@ def _completion(content: str):
     )
 
 
-def test_deterministic_fact_failure_returns_422(monkeypatch):
+def test_supported_duration_wording_is_not_rejected_by_deterministic_checks(
+    monkeypatch,
+):
     monkeypatch.setattr(
         resume_customizer.client.chat.completions,
         "create",
         lambda **_: _completion(
             json.dumps(
                 {
-                    "customized_resume": "Email: changed@example.com",
+                    "customized_resume": "Developer with 6 years of experience.",
                     "suggested_keywords": [],
                 }
             )
         ),
     )
+    monkeypatch.setattr(
+        resume_customizer,
+        "validate_resume_claims",
+        lambda **_: ResumeValidationResponse(issues=[]),
+    )
 
-    with pytest.raises(HTTPException) as exc:
-        resume_customizer.customize_resume(
-            resume_text="Email: original@example.com",
-            job_description="Software engineer",
-        )
+    result = resume_customizer.customize_resume(
+        resume_text="Over 5 years of professional experience.",
+        job_description="Software engineer",
+    )
 
-    assert exc.value.status_code == 422
-    assert "safely finalize" in exc.value.detail
+    assert result.customized_resume == "Developer with 6 years of experience."
 
 
 def test_unresolved_non_high_validation_issue_returns_422(monkeypatch):

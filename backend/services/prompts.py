@@ -22,7 +22,10 @@ Rules:
    project names, implementation status, scope, and contributions; skills,
    tools, certifications, achievements, numbers, and metrics.
 4. Flag invented skills, tools, qualifications, responsibilities, projects,
-   achievements, metrics, dates, employers, and experience durations.
+   achievements, metrics, dates, employers, and experience durations. Do not
+   infer or calculate experience durations from employment dates; flag a
+   duration only when it is not explicitly stated or directly supported by
+   the original resume.
 5. Flag every original factual detail omitted from the generated resume, as
    well as facts that are changed, contradicted, or materially exaggerated.
    Do not treat JD-based prioritization as permission to silently drop
@@ -90,7 +93,7 @@ CORE PRINCIPLES:
 1. The TARGET JOB DESCRIPTION determines which qualifications,
    responsibilities, skills, and accomplishments deserve emphasis.
 
-2. The original resume is the sole source of truth for candidate-specific facts. Tailor wording and emphasis to the job description, but never invent or upgrade skills, responsibilities, implementation details, achievements, metrics, certifications, education dates, or experience. Preserve every original factual detail, including contact details, institutions, degree status, dates, work history, projects, skills, certifications, and numbers. Preserve the meaning of dates and statuses exactly; never change "2026 – Present" to "Expected 2026". Related experience is not proof of direct experience. When evidence is unclear, use narrower wording or omit only the unsupported claim, not a supported original fact.
+2. The original resume is the sole source of truth for candidate-specific facts. Preserve all original facts, including contact details, education, degrees and degree status, institutions, dates, experience, projects, skills, certifications, numbers, and qualifications. Never invent, assume, modify, or remove factual information. Improve wording, structure, and relevance without changing the meaning of the original resume. Preserve the meaning of dates and statuses exactly; for example, "2026 – Present" must not become "Expected 2026". Only include experience durations explicitly stated or directly supported by the original resume; never infer or calculate a duration from employment dates. Related experience is not proof of direct experience. When evidence is unclear, use narrower wording without changing or removing a supported original fact.
 
 3. Never assume a particular profession, industry, seniority level,
    or technical discipline. Determine the target role dynamically
@@ -206,6 +209,7 @@ FINAL QUALITY CHECK:
 Before returning the result, verify that:
 - All candidate-specific facts, contact details, education, and project status match the original resume.
 - Every skill, responsibility, metric, certification, and technical claim is supported by the original.
+- Experience durations are explicitly stated or directly supported by the original; none are inferred from dates.
 - The resume is tailored to the supplied job description without implying unsupported direct experience.
 - Suggested keywords are genuinely missing or partially demonstrated and are not inserted into the resume without evidence.
 - The complete resume is preserved, the wording is ATS-friendly, and the response follows the required JSON schema exactly.
@@ -269,6 +273,8 @@ Rules:
   dates, work history, projects, skills, certifications, and numbers.
 - Preserve date and status meaning exactly; for example, do not change
   "2026 – Present" to "Expected 2026".
+- Include only experience durations explicitly stated or directly supported
+  by the original resume. Do not infer or calculate durations from dates.
 - Return only valid JSON matching the required resume response schema.
 
 ORIGINAL RESUME:
